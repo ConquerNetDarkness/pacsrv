@@ -696,6 +696,66 @@ bool Node::ProcessFileRequest(int nLength)
 
 
 //-----------------------------------------------------------------------------
+// CJW: We have asked the other node for a particular file, and it has returned 
+// 		an answer.  We need to....  
+bool Node::ProcessFileGot(int nLength)
+{
+	bool bOK = false;
+	unsigned char *pData = NULL;
+	int nLen, i;
+	
+	ASSERT(_Status.bClosed == false);
+	ASSERT(_Status.bValid == true);
+	
+	if (nLength > 3 && _pFileRequest == NULL) {
+		pData = (unsigned char *) _DataIn.Pop(3);
+		_pFileRequest = new strFileRequest;
+		
+		_pFileRequest->nHops = pData[0];
+		_pFileRequest->nTtl  = pData[1];
+		_pFileRequest->nFlen = pData[3];
+		
+		ASSERT(_pFileRequest->nTtl > 0);
+		
+		nLen = _pFileRequest->nFlen+(_pFileRequest->nHops * 6);
+		if (nLength >= 3+nLen) {
+			free(pData);
+			pData = (unsigned char *) _DataIn.Pop(nLen);
+			
+			memcpy(_pFileRequest->szFile, pData, _pFileRequest->nFlen);
+			_pFileRequest->szFile[_pFileRequest->nFlen] = '\0';
+			
+			_pFileRequest->pHosts = (Address **) malloc(sizeof(Address*) * (_pFileRequest->nHops + 1));
+			
+			for (i=0; i < _pFileRequest->nHops; i++) {
+				_pFileRequest->pHosts[i] = new Address;
+				_pFileRequest->pHosts[i]->Set(&pData[_pFileRequest->nFlen + (i*6)]);
+			}
+			_pFileRequest->pHosts[_pFileRequest->nHops] = new Address;
+			_pFileRequest->pHosts[_pFileRequest->nHops]->Set(_pRemoteNode);
+			_pFileRequest->nHops++;
+			_pFileRequest->nTtl--;
+			
+			bOK = true;
+		}
+		else {
+			_DataIn.Push((char *) pData, 3);
+		}
+
+		if (pData != NULL) {
+			free(pData);
+		}
+	}
+	else {
+		_DataIn.Push("F", 1);
+	}
+	
+	return (bOK);
+
+}
+
+
+//-----------------------------------------------------------------------------
 // CJW: If we received a file request from the node, we would have stored it.  
 // 		We will return control of this file request to the caller.  
 strFileRequest * Node::GetFileRequest(void)
