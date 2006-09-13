@@ -1,0 +1,52 @@
+
+INTRODUCTION
+
+pacsrv is a daemon/client application set that provides a distributed package network for pacman (archlinux) packages.  Rather than relying on HTTP and FTP mirrors around the world, if people install and activate this daemon, they can help provide packages that they have already downloaded to other users.
+
+This would be especially usefull in a workplace environment where a number of archlinux installations get packages.  Rather than providing specific FTP or HTTP content caching, or creating a wasteful mirror, you just have each client get the packages they need, and if any workstation requests a package that another workstation has, they can all work together to provide chunks of that package to the updating installation.
+
+If only a few people install and use this application, then actual download speeds may not be very good, because you are using the upload bandwidth of a few users (it does not download from FTP and HTTP mirrors at the same time, but its possible that it could also do that).  But if more than a dozen or so cable or dsl installations have the daemon running, then download speeds should rival that received from the existing mirrors, because the client will receive the file from multiple sources.
+
+
+PRE-REQUISITES
+
+In order to compile this application and daemon, you need to DevPlus developer library installed.  This can be obtained from http://cjdj.org/product/devplus (there is an archlinux package available).  It is not needed for run time, merely for compilation (the libraries are compiled into the pacsrv binaries).
+
+INSTALLATION
+
+You need to be root, and you should actually install the ready made package if it is available.  To create the daemon and client, its rather simple.
+
+   make 
+   make install
+   
+CONFIGURATION
+
+There is a config file at /etc/pacsrv.conf which has some configuration information.  For example, you can configure it to create a direct connection to another pacsrv server.  This is useful if you need to get out of a closed network.  You can also change the ports and such that you connect thru.  You do not need to use the ports specified in the example config file as there is nothing special about them.  However, you must choose different ports for the network and server components.  The network port if so other servers can connect to yours.  The server port is so that the client can connect the daemon.  These are using two different ports because the communication protocol is vastly different, and also, you dont want a blast of network nodes connecting to you and disrupting your client from being able to connection.   Additionally, it makes it easier to block certain activities by a firewall.  For example, if you want to allow other nodes to connect to your server in the normal way, but dont want them to be able to connect as a client, you can only allow the network port thru the firewall.
+
+You can also specify if the system will query the webhost for a node in the network.  This is used so that when the daemon first starts up, it doesnt actually know of any other systems in the network, so it queries the webserver, which adds your IP and port to its list, and returns with a couple of IP/Ports to try to connect to.  When other servers do the same query, they might then end up with your IP/port, and will try to connect to you.   If you are behind a corporate firewall, you may not wish the daemon to try this route because the IP address you provide is probably not routable back to you.
+
+
+
+
+NAT ROUTING
+
+This suite will work fine even if you are using NAT without any port forwarding.  You just wont be able to contribute your bandwidth to others.  In other words, you will be able to download, but wont be able to upload to others.  This works because when your server requests a file from the network.  Other nodes that have the file will reply THRU the network with their IP/Port and you can contact them directly.  Assuming that there is no restrictions on outbound traffic and routing.  
+
+A FILE query will be sent to all the nodes that are actually connected to the server with a TTL set to a certain number of hops.  Those nodes will send the query on to the nodes they are connected to (decrementing the TTL) and so on until the TTL reaches zero.   On each jump, the IP/Port of the added to the message so that a return route is easily established.   When a node has the file, it will still forward the request on to its nodes, but will also reply with a FILE-ACK message (setting the TTL to max).  The node that received that FILE-ACK would be the last one on the route list.  It would remove its IP, and send it to the next one in the list since it should have a connection to that IP/port already.  If the connection was lost to that particular system, this node will set the TTL to max, and send the reply to all its existing nodes.  If any of those nodes happen to be in the list of remaining IP/port combos, it will pick up the reply and continue on.  If not, then it will decrement the TTL and send it to all its connected nodes. 
+
+That way, even when the network is in flux and connections are constantly moving around, any query should be able to get to a fast number of nodes, and the replies should be able to make it back to the node that made the original query.  It is possible that query replies could get lost.
+
+When sending the messages out, the sender would verify that the node they are sending it to, isnt already on the list.
+
+
+MIRROR DOWNLOADING
+
+The daemon will also get chunks of data from the mirror repositories if it doesnt receive a responce from the network within 2 seconds.  This functionality will not be included in the first release because it is not strictly needed.  It will however, help improve download times for the first few times that a package is downloaded.  It removed the burden of supplying the entire package from the first person that happens to download it.  
+
+For example, if a large package (say 100mb in size) is released.  And its not a very popular one.   The first person who downloads the package may be someone on a dial-up connection.  If the next person who attempts to download that package is on a high speed connection, they would resort to retreiving the entire package from that first person on dial-up who happened to get it... if it only received it thru the network.  If the second downloader received a few chunks from the dial-up person, but then got the rest from the mirror over a faster connection, then it would be of benefit to everyone.
+
+
+
+
+
+

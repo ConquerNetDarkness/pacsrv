@@ -1,0 +1,18 @@
+ 
+  - Get the signal handler to respond to more SIG* events so that it can be started as a daemon
+  - Write the script that will start it as a daemon and make note of the pid file, etc.
+  
+Improvements
+  - set a size limit in the config file so that if the file is rather small, just go ahead and get it from the webserver.
+  - set some initial IP addresses to connect to.  This is useful if you are on a local lan and want to use distributed packages.   Once the server is on the network it can establish its own connection amongst the servers based on ping times, but
+
+
+
+Web Download
+  To improve performance of packages that are newly released to the network, it would also be of benefit to the clients if parts of the file is still downloaded from the mirror.
+
+  It would do this in a seperate thread for each call, and we would have to modify our DpHttpClient object so that we can request parts of a file.
+
+  While the network is being queried, a chunk will be requested directly from the webserver.
+
+  This will also be of benefit because the file can begin downloading from the website immediately and can be complimented by the pacsrv network.  If the file isnt on the network, then the entire thing can still be downloaded from the website mirror.  Small files will not likely be even requested from the network in this case.
