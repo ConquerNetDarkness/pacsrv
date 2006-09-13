@@ -10,7 +10,7 @@ If only a few people install and use this application, then actual download spee
 
 PRE-REQUISITES
 
-In order to compile this application and daemon, you need to DevPlus developer library installed.  This can be obtained from http://cjdj.org/product/devplus (there is an archlinux package available).  It is not needed for run time, merely for compilation (the libraries are compiled into the pacsrv binaries).
+In order to compile this application and daemon, you need the DevPlus developer library installed.  This can be obtained from http://cjdj.org/product/devplus (there is an archlinux package available).  It is not needed for run time, merely for compilation (the libraries are compiled into the pacsrv binaries).
 
 INSTALLATION
 
@@ -21,10 +21,7 @@ You need to be root, and you should actually install the ready made package if i
    
 CONFIGURATION
 
-There is a config file at /etc/pacsrv.conf which has some configuration information.  For example, you can configure it to create a direct connection to another pacsrv server.  This is useful if you need to get out of a closed network.  You can also change the ports and such that you connect thru.  You do not need to use the ports specified in the example config file as there is nothing special about them.  However, you must choose different ports for the network and server components.  The network port if so other servers can connect to yours.  The server port is so that the client can connect the daemon.  These are using two different ports because the communication protocol is vastly different, and also, you dont want a blast of network nodes connecting to you and disrupting your client from being able to connection.   Additionally, it makes it easier to block certain activities by a firewall.  For example, if you want to allow other nodes to connect to your server in the normal way, but dont want them to be able to connect as a client, you can only allow the network port thru the firewall.
-
-You can also specify if the system will query the webhost for a node in the network.  This is used so that when the daemon first starts up, it doesnt actually know of any other systems in the network, so it queries the webserver, which adds your IP and port to its list, and returns with a couple of IP/Ports to try to connect to.  When other servers do the same query, they might then end up with your IP/port, and will try to connect to you.   If you are behind a corporate firewall, you may not wish the daemon to try this route because the IP address you provide is probably not routable back to you.
-
+There is a config file at /etc/pacsrv.conf which has some configuration information.  For example, you can configure it to create a direct connection to another pacsrv server.  This is useful if you need to get out of a closed network.  You can also change the ports and such that you connect thru.  You do not need to use the ports specified in the example config file as there is nothing special about them.  However, you must choose different ports for the network and server components.  The network port if so other servers can connect to yours.  The server port is so that the client can connect the daemon.  These are using two different ports because the communication protocol is vastly different, and also, you dont want a blast of network nodes connecting to you and disrupting your client from being able to connect.   Additionally, it makes it easier to block certain activities by a firewall.  For example, if you want to allow other nodes to connect to your server in the normal way, but dont want them to be able to connect as a client, you can only allow the network port thru the firewall.
 
 
 
