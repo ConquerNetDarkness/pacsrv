@@ -4,7 +4,11 @@
 //  Project: pacsrv
 //  Author: Clint Webb
 //
-//		Stored information about a file, such as all the chunks, etc.   As we recieve chunks of a file from the nodes in the network, we store it in this linked list.  Since we will eventually know the size of the file, and the number of chunks, we can easily create an array of pointers.   This will be the easiest to manage.
+//		Stored information about a file, such as all the chunks, etc.   As we 
+//		recieve chunks of a file from the nodes in the network, we store it in 
+//		this linked list.  Since we will eventually know the size of the file, 
+//		and the number of chunks, we can easily create an array of pointers.   
+//		This will be the easiest to manage.
 //
 //-----------------------------------------------------------------------------
 
