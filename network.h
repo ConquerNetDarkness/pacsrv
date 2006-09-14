@@ -11,15 +11,14 @@
 //      pass the socket connection to that.  This class is a thread-object and
 //      will continue to idle until connections arrive.  The Idle functionality
 //      will be used to try and maintain a connection of up to 3 other servers.
-//      To do this, it will check the existing connections, and will also query
-//      the CGI script for more IP addresses.  It will periodically send a PING
-//      message to each server and will make a note of the time it took to get
-//      a reply.  The server with the slowest ping times will be dropped if a
-//      faster connection can be found, this makes it for a self-adjusting
-//      network with the slowest connections continuously being dropped so that
-//      the fastest can stay closer together.  Please note that the slow
-//      connection will not be dropped until a new connection has been
-//      established that is faster.
+//      To do this, it will check the existing connections.  It will 
+//      periodically send a PING message to each server and will make a note 
+//      of the time it took to get a reply.  The server with the slowest ping 
+//      times will be dropped if a faster connection can be found, this makes 
+//      it for a self-adjusting network with the slowest connections 
+//      continuously being dropped so that the fastest can stay closer 
+//      together.  Please note that the slow connection will not be dropped 
+//      until a new connection has been established that is faster.
 //
 //      While idling, the network will attempt to keep at least the minimum
 //      connections.  If the minimum is obtained, it will not connect to any

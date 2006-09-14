@@ -295,63 +295,16 @@ void Network::CheckConnections(void)
 
 
 //-----------------------------------------------------------------------------
-// CJW: It will return a true if we were able to actually connect to a remote 
-//      server.  It will return a false if it wasnt able to connect.   If there
-//      is a direct server listed in the config file, then we will try that
-//      first.  If we still cant establish a connection, then we will query the
-//      webserver (if that option is enabled) for an IP address that we can use 
-//      to try and connect to the package network.
-//
-//      This function is used to establish all outgoing connections that are
-//      not to download a particular file.  In fact, this function isn't
-//      supposed to do any real connecting at all.  That is done in the
-//      ConnectNode() function.  This function is supposed to determine which
-//      server it is supposed to try connecting to.  To do that it will check
-//      the server list, and try the next one in the list.  If the list is
-//      empty, it will get the "direct" connection info if it was provided,
-//      and put that in the list.   If the list is either empty, or none are
-//      left that are ready to be checked, then we will perform the web-query
-//      to get a few more entries that can be added to the list.
-//
-// NOTE: no actual data is sent over the connection.  It is up to the normal 
-//       client operations to actually establish a hand-shake with the other
-//       server.
+// CJW: This function will be called when we dont have our minimum number of 
+// 		connections.  We will need to go thru the list of servers that we have 
+// 		an try to connect to any that we can.  If there isnt any in the list 
+// 		we can use, then we will have to wait till we get told about some new 
+// 		connections.
 bool Network::ConnectStarter(void)
 {
-    bool bConnected = false;
-    int code;
-    int length;
-    char buffer[128];
-    DpHttpClient *pHttp;
-    ServerInfo *pInfo;
-
-    pInfo = _pServerList->GetNextServer();
-    if (pInfo == NULL) {
-    
-        if (_Connections.bWebQuery == true) {
-            ASSERT(_nPort > 0);
-    
-            pHttp = new DpHttpClient;
-
-            sprintf(buffer, "http://cjdj.org/pacsrv/host.cgi?port=%d", _nPort);
-            code = pHttp->Get(buffer);
-            length = pHttp->GetLength();
-            printf("code == %d, length==%d\n", code, length);
-    
-            if (code == 200) {
-                // we got a good code, so we need to process the data in it, and get the server and ip address info.
-            }
-    
-            delete pHttp;
-        }
-    }
-    else {
-        bConnected = ConnectNode(pInfo);
-    }
-        
-    return(bConnected);
+	// TODO:
+	return false;
 }
-
 
 
 //-----------------------------------------------------------------------------
@@ -417,6 +370,12 @@ void Network::CloseSlowConnection(void)
 //
 //      We will also ask the node if it has received any serverlist
 //      information.  If so, it adds it to our main server-list.
+//
+//		Finally we will need to ask the node if it has received any GotFile 
+//		notifications.  If it has, then we need to pull out the next node it 
+//		needs to be passed onto, and if we still have a connection to it 
+//		(which we most likely do), then we will pass that information onto 
+//		that node.
 void Network::ProcessNodes(void)
 {
     int max=0;
@@ -512,6 +471,16 @@ void Network::ProcessNodes(void)
 
 					delete pReq;
 				}
+				
+				// Ask the node if it has received a reply for a file request.  
+				// If it did, then we got some information back, that we need 
+				// to pass back to the node that we originally got it from.
+				pReq = pTmp->GetFileReply();
+				if (pReq != NULL) {
+					RelayFileReply(pReq, pTmp);
+					delete pReq;
+				}
+				
             }
             else {
                 bClosed = true;
