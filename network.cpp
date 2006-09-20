@@ -389,6 +389,7 @@ void Network::ProcessNodes(void)
 	FileInfo *pInfo;
 	Address *pServerInfo;
 	strFileRequest *pReq;
+	strFileReply *pReply;
     
     Lock();
     
@@ -457,7 +458,7 @@ void Network::ProcessNodes(void)
 				// needs to be passed on to the other nodes
 				pReq = pTmp->GetFileRequest();
 				if (pReq != NULL) {
-					RelayFileRequest(pReq, pTmp);
+					RelayFileRequest(pReq);
 					
 					ASSERT(_pFileList != NULL);
 					pInfo = _pFileList->GetFileInfo(pReq->szFile);
@@ -475,10 +476,10 @@ void Network::ProcessNodes(void)
 				// Ask the node if it has received a reply for a file request.  
 				// If it did, then we got some information back, that we need 
 				// to pass back to the node that we originally got it from.
-				pReq = pTmp->GetFileReply();
-				if (pReq != NULL) {
-					RelayFileReply(pReq, pTmp);
-					delete pReq;
+				pReply = pTmp->GetFileReply();
+				if (pReply != NULL) {
+					RelayFileReply(pReply);
+					delete pReply;
 				}
 				
             }
@@ -550,8 +551,6 @@ void Network::RemoveClosedNodes(void)
 {
     Node *pTmp, *pPrev;
     
-    ASSERT(0);  // I dont think this works right... look at it.
-    
     pPrev = NULL;
     pTmp = _pNodes;
     while (pTmp != NULL) {
@@ -565,10 +564,10 @@ void Network::RemoveClosedNodes(void)
             }
         }
         else {
+			pPrev = pTmp;
             pTmp = pTmp->GetNext();
         }
     }
-    
 }
 
 
@@ -586,11 +585,8 @@ bool Network::RunQuery(char *szQuery, int nChunk, char **pData, int *nSize, int 
     FileInfo *pInfo;
     Node *pNode;
     
-    ASSERT(szQuery != NULL);
-    ASSERT(nChunk >= 0);
-    ASSERT(pData != NULL);
-    ASSERT(nSize != NULL);
-    ASSERT(nLength != NULL);
+    ASSERT(szQuery != NULL && nChunk >= 0 &&  pData != NULL);
+    ASSERT(nSize != NULL && nLength != NULL);
     
     Lock();
 	
@@ -828,19 +824,22 @@ bool Network::GetNextFile(char **szFilename)
 // CJW: We've received a file request from a node.  We need to relay this info 
 // 		on to our other nodes (if our ttl is greater than zero).  However, we 
 // 		dont want to send it back to the node that we just got it from, so we 
-// 		send it to everything except that one.
+// 		send it to everything except that one.  We also dont want to send it to 
+// 		any server that is already on the list of hosts that is inside this 
+// 		message packet.
 //
 //		F<hops><ttl><flen><file*flen><host*6>...<host*6>
-void Network::RelayFileRequest(strFileRequest *pReq, Node *pNode)
+void Network::RelayFileRequest(strFileRequest *pReq)
 {
-	Node *pTmp;
+	Node *pNode;
 	int i, j;
 	unsigned char buffer[2048];
-	
-	
+	Address *pAddr;
+	bool bSend;
+	unsigned char tmp[6];
+
 	ASSERT(pReq != NULL);
-	ASSERT(pNode != NULL);
-	ASSERT(_pNodes != NULL);
+	ASSERT(_pNodes != NULL);	// must have at least one, because we got this message from somewhere.
 	
 	// First we build our message because it is going to be the same for each node.
 	i=0;
@@ -857,16 +856,85 @@ void Network::RelayFileRequest(strFileRequest *pReq, Node *pNode)
 	}
 	
 	// Then we go thru the nodes and tell each one to send the message.
-	pTmp = _pNodes;
-	while(pTmp != NULL) {
-		if (pTmp->IsConnected() == true) {
-			if (pTmp != pNode) {
-				pTmp->SendMsg((char *)buffer, i);
+	pNode = _pNodes;
+	while(pNode != NULL) {
+		if (pNode->IsConnected() == true) {
+			
+			// check that it is not from a node that has already got this message
+			pAddr = pNode->GetServerInfo();
+			if (pAddr != NULL) {
+				
+				bSend = true;
+				for (j=0; j<pReq->nHops && bSend == true; j++) {
+					pReq->pHosts[j]->Get(tmp);			
+					if (pAddr->IsSame(tmp) == false) {
+						bSend = false;
+					}
+				}
+				
+				if (bSend == true) {
+					pNode->SendMsg((char *)buffer, i);
+				}
 			}
 		}
-		pTmp = pTmp->GetNext();
+		pNode = pNode->GetNext();
 	}
 }
+
+
+
+//-----------------------------------------------------------------------------
+// CJW: We've received a file reply from a node.  We need to relay this info 
+// 		on to the last host in the list.  our other nodes (if our ttl is greater than zero).  However, we 
+// 		dont want to send it back to the node that we just got it from, so we 
+// 		send it to everything except that one.
+//
+//		G<hops><flen><file*flen><target*6><host*6>...<host*6>
+void Network::RelayFileReply(strFileReply *pReply)
+{
+	Node *pNode;
+	unsigned char pNextAddress[6];
+	Address *pAddr;
+	int i, j;
+	unsigned char buffer[2048];
+	
+	ASSERT(pReply != NULL);
+	ASSERT(_pNodes != NULL);
+	
+	ASSERT(pReply->nHops > 0);
+	pReply->pHosts[pReply->nHops-1]->Get(pNextAddress);
+	
+	
+	// First we build our message because it is going to be the same for each node.
+	i=0;
+	buffer[i++] = 'G';
+	buffer[i++] = pReply->nHops-1;
+	buffer[i++] = pReply->nFlen;
+	for (j=0; j<pReply->nFlen; j++) {
+		buffer[i++] =  pReply->szFile[j];
+	}
+	for (j=0; j<pReply->nHops-1; j++) {
+		pReply->pHosts[j]->Get(&buffer[i]);
+		i += 6;
+	}
+	
+	ASSERT(i < 2048);
+	
+	// Go thru the nodes and find the one we need to send the message to.
+	pNode = _pNodes;
+	while(pNode != NULL) {
+		if (pNode->IsConnected() == true) {
+			pAddr = pNode->GetServerInfo();
+			if (pAddr != NULL) {
+				if (pAddr->IsSame(pNextAddress) == true) {
+					pNode->SendMsg((char *)buffer, i);
+				}
+			}
+		}
+		pNode = pNode->GetNext();
+	}
+}
+
 
 
 

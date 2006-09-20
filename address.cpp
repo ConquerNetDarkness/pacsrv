@@ -135,4 +135,22 @@ void Address::Set(Address *pAddr)
 	Set(pAddr->GetServer(), pAddr->GetPort());
 }
 
+//-----------------------------------------------------------------------------
+// CJW: Used to compare the information that we have as an address against a 
+// 		raw address packet that we have received.
+bool Address::IsSame(unsigned char *pRaw)
+{
+	unsigned char pData[6];
+	bool bSame = true;
+	int i;
+	
+	Get(pData);
+	for (i=0; i<6 && bSame == true; i++) {
+		if (pData[i] != pRaw[i]) {
+			bSame = false;
+		}
+	}
+	
+	return(bSame);
+}
 

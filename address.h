@@ -54,6 +54,8 @@ struct Address
 		int GetPort();
 		
 		void Get(unsigned char *pRaw);
+		
+		bool IsSame(unsigned char *pRaw);
 	
 	protected:
 		

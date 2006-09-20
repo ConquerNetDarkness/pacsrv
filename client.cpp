@@ -216,7 +216,6 @@ void Client::QueryResult(int nChunk, char *pData, int nSize, int nLength)
 //      settings, otherwise we close the connection.
 bool Client::ProcessInit(int nLength)
 {   
-    Logger *pLogger;
     bool bOK = true;
     unsigned char *pData;
 
@@ -261,7 +260,6 @@ bool Client::ProcessInit(int nLength)
 //      it, so that it can be passed on the network of nodes.
 bool Client::ProcessFileRequest(int nLength)
 {   
-    Logger *pLogger;
     bool bOK = true;
     unsigned char *pData;
     unsigned char nFileLength;
