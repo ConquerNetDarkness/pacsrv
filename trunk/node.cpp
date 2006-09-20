@@ -56,21 +56,22 @@ Node::Node()
 	
     _Status.bAccepted	= false;
 	_Status.bInit		= false;
-	_Status.bClosed	= false;
+	_Status.bClosed		= false;
 	_Status.bValid		= false;
 	
 	_Data.szFilename = NULL;
-	_Data.pData = NULL;
-	_Data.nChunk = 0;
-	_Data.nSize = 0;
+	_Data.pData		 = NULL;
+	_Data.nChunk	 = 0;
+	_Data.nSize		 = 0;
 	
-	_Heartbeat.nBeats = 0;
-	_Heartbeat.nDelay = 0;
+	_Heartbeat.nBeats	  = 0;
+	_Heartbeat.nDelay	  = 0;
 	_Heartbeat.nLastCheck = time(NULL);
 
 	_pFileRequest = NULL;
-	_pServerInfo = NULL;
-	_pRemoteNode = NULL;
+	_pFileReply   = NULL;
+	_pServerInfo  = NULL;
+	_pRemoteNode  = NULL;
 }
 
 
@@ -94,20 +95,10 @@ Node::~Node()
 		_Data.pData = NULL;
 	}
 	
-	if (_pServerInfo != NULL) {
-		delete _pServerInfo;
-		_pServerInfo = NULL;
-	}
-	
-	if (_pFileRequest != NULL) {
-		delete _pFileRequest;
-		_pFileRequest = NULL;
-	}
-	
-	if (_pRemoteNode != NULL) {
-		delete _pRemoteNode;
-		_pRemoteNode = NULL;
-	}
+	if (_pServerInfo != NULL)	{ delete _pServerInfo;	_pServerInfo = NULL; }
+	if (_pFileRequest != NULL)	{ delete _pFileRequest;	_pFileRequest = NULL; }
+	if (_pFileReply != NULL)	{ delete _pFileReply;	_pFileReply = NULL; }
+	if (_pRemoteNode != NULL)	{ delete _pRemoteNode;	_pRemoteNode = NULL; }
 }
 
 
@@ -426,7 +417,7 @@ Address * Node::GetServerInfo(void)
 //-----------------------------------------------------------------------------
 // CJW: We need to send a request to the node.  It doesnt matter if the node is 
 // 		already downloading a file, because in this case, we are telling the 
-// 		node to pass the file on.  We are not actually asking the node to start 
+// 		node to pass the request on.  We are not actually asking the node to start 
 // 		downloading this file.  We only want to let the nodes know that we are 
 // 		looking for it.
 //	
@@ -451,7 +442,7 @@ void Node::RequestFileFromNetwork(char *szFilename)
 	ASSERT(data.buffer != NULL);
 	
 	nTmp = 0;
-	data.buffer[nTmp++] = 'L';
+	data.buffer[nTmp++] = 'F';
 	data.buffer[nTmp++] = data.nHops;
 	data.buffer[nTmp++] = data.nTtl;
 	data.buffer[nTmp++] = data.nFlen;
@@ -672,8 +663,10 @@ bool Node::ProcessFileRequest(int nLength)
 				_pFileRequest->pHosts[i] = new Address;
 				_pFileRequest->pHosts[i]->Set(&pData[_pFileRequest->nFlen + (i*6)]);
 			}
+			
+			ASSERT(_pServerInfo != NULL);
 			_pFileRequest->pHosts[_pFileRequest->nHops] = new Address;
-			_pFileRequest->pHosts[_pFileRequest->nHops]->Set(_pRemoteNode);
+			_pFileRequest->pHosts[_pFileRequest->nHops]->Set(_pServerInfo);
 			_pFileRequest->nHops++;
 			_pFileRequest->nTtl--;
 			
@@ -697,7 +690,8 @@ bool Node::ProcessFileRequest(int nLength)
 
 //-----------------------------------------------------------------------------
 // CJW: We have asked the other node for a particular file, and it has returned 
-// 		an answer.  We need to....  
+// 		an answer.  We need to save the message so that the Network object can 
+// 		retrieve it, and pass it to the appropriate node.
 bool Node::ProcessFileGot(int nLength)
 {
 	bool bOK = false;
@@ -707,34 +701,30 @@ bool Node::ProcessFileGot(int nLength)
 	ASSERT(_Status.bClosed == false);
 	ASSERT(_Status.bValid == true);
 	
-	if (nLength > 3 && _pFileRequest == NULL) {
+	if (nLength > 3 && _pFileReply == NULL) {
 		pData = (unsigned char *) _DataIn.Pop(3);
-		_pFileRequest = new strFileRequest;
+		_pFileReply = new strFileRequest;
 		
-		_pFileRequest->nHops = pData[0];
-		_pFileRequest->nTtl  = pData[1];
-		_pFileRequest->nFlen = pData[3];
+		_pFileReply->nHops = pData[0];
+		_pFileReply->nTtl  = pData[1];
+		_pFileReply->nFlen = pData[3];
 		
-		ASSERT(_pFileRequest->nTtl > 0);
+		ASSERT(_pFileReply->nTtl > 0);
 		
-		nLen = _pFileRequest->nFlen+(_pFileRequest->nHops * 6);
+		nLen = _pFileReply->nFlen+(_pFileReply->nHops * 6);
 		if (nLength >= 3+nLen) {
 			free(pData);
 			pData = (unsigned char *) _DataIn.Pop(nLen);
 			
-			memcpy(_pFileRequest->szFile, pData, _pFileRequest->nFlen);
-			_pFileRequest->szFile[_pFileRequest->nFlen] = '\0';
+			memcpy(_pFileReply->szFile, pData, _pFileReply->nFlen);
+			_pFileReply->szFile[_pFileReply->nFlen] = '\0';
 			
-			_pFileRequest->pHosts = (Address **) malloc(sizeof(Address*) * (_pFileRequest->nHops + 1));
+			_pFileReply->pHosts = (Address **) malloc(sizeof(Address*) * (_pFileReply->nHops));
 			
-			for (i=0; i < _pFileRequest->nHops; i++) {
-				_pFileRequest->pHosts[i] = new Address;
-				_pFileRequest->pHosts[i]->Set(&pData[_pFileRequest->nFlen + (i*6)]);
+			for (i=0; i < _pFileReply->nHops; i++) {
+				_pFileReply->pHosts[i] = new Address;
+				_pFileReply->pHosts[i]->Set(&pData[_pFileReply->nFlen + (i*6)]);
 			}
-			_pFileRequest->pHosts[_pFileRequest->nHops] = new Address;
-			_pFileRequest->pHosts[_pFileRequest->nHops]->Set(_pRemoteNode);
-			_pFileRequest->nHops++;
-			_pFileRequest->nTtl--;
 			
 			bOK = true;
 		}
@@ -742,16 +732,13 @@ bool Node::ProcessFileGot(int nLength)
 			_DataIn.Push((char *) pData, 3);
 		}
 
-		if (pData != NULL) {
-			free(pData);
-		}
+		if (pData != NULL) { free(pData); }
 	}
 	else {
-		_DataIn.Push("F", 1);
+		_DataIn.Push("G", 1);
 	}
 	
 	return (bOK);
-
 }
 
 
@@ -767,6 +754,22 @@ strFileRequest * Node::GetFileRequest(void)
 	
 	return(pReq);
 }
+
+
+//-----------------------------------------------------------------------------
+// CJW: If we received a file reply from the node, we would have stored it.  
+// 		We will return control of this file reply to the caller.  
+strFileRequest * Node::GetFileReply(void)
+{
+	strFileRequest *pReq;
+	
+	pReq = _pFileReply;
+	_pFileReply = NULL;
+	
+	return(pReq);
+}
+
+
 
 
 //-----------------------------------------------------------------------------
@@ -787,11 +790,92 @@ void Node::SendMsg(char *ptr, int len)
 // 		find the one that passed the request on.
 void Node::ReplyFileFound(strFileRequest *pReq, FileInfo *pInfo)
 {
+	int i, j;
+	unsigned char buffer[2048];
+	
 	ASSERT(pReq != NULL);
 	ASSERT(pInfo != NULL);
 	
+	ASSERT(pReq->nFlen > 0); 
 	
+	// First we build our message because it is going to be the same for each node.
+	i=0;
+	buffer[i++] = 'G';
+	buffer[i++] = pReply->nHops;
+	buffer[i++] = pReply->nFlen;
 	
+	for (j=0; j< pReply->nFlen; j++) {
+		buffer[i++] =  pReply->szFile[j];
+	}
 	
+	ASSERT(_pServerInfo != NULL);
+	_pServerInfo->Get(&buffer[i]);
+	i +=  6;
+	
+	for (j=0; j<pReply->nHops; j++) {
+		pReply->pHosts[j]->Get(&buffer[i]);
+		i += 6;
+	}
+	
+	SendMsg((char *)buffer, i);
 }
+
+
+//-----------------------------------------------------------------------------
+// CJW: When the daemon has sent a file request and received connection 
+// 		information about a node that has the file, the daemon will send the 
+// 		(L) telegram.  Actually, every time we connect to another node, we will 
+// 		send a request for all the files that we are trying to fulfull.   If 
+// 		the node has the file, it will return an (A) telegram.  If it doesnt 
+// 		have the file it will send an (N) telegram.  If we connect to a server 
+// 		we will send this command immediately after all initialisation is done.   
+// 		If the node connected to us, we will wait 2 seconds and then ask them 
+// 		for any file that we have a need for.
+//
+//		-->  L<flen><file*flen>
+// 		<--  A<flen><length*4><file*flen>
+// 		<--  N<flen><file*flen>
+bool Node::ProcessLocalFile(int nLength)
+{
+	bool bProcessed;
+	unsigned char *pData;
+	struct {
+		unsigned char flen;
+		char *fname;
+	} data;
+	int length;
+	
+	if (nLength > 3) {
+		pData = (unsigned char *) _DataIn.Pop(1);
+		data.flen = *pData;
+		free(pData);
+		
+		ASSERT(data.flen > 0);
+		length = _DataIn.Length();
+		
+		if (length <= data.flen) {
+			_DataIn.Push(&data.flen, 1);
+			_DataIn.Push("L", 1);
+		}
+		else {
+			pData = _DataIn.Pop(data.flen);
+			data.fname = (char *) malloc(data.flen + 1);
+			strncpy(data.fname, pData, data.flen);
+			free(pData);	
+		
+			
+			
+			bOK = true;
+			
+			
+		// check to see if we have that file in our cache.
+		// if we do, send an (A), make note of all the details.
+		// if we dont, send an (N)
+		}
+	}
+	else {
+		_DataIn.Push("L", 1);
+	}
+}
+
 

@@ -79,6 +79,41 @@ struct strFileRequest {
 };
 
 
+struct strFileReply {
+	unsigned char nHops;
+	unsigned char nFlen;
+	char szFile[256];
+	Address *pTarget;
+	Address **pHosts;
+	
+	strFileReply() {
+		nHops = 0;
+		nFlen = 0;
+		szFile[0] = '\0';
+		pTarget = NULL;
+		pHosts = NULL;
+	}
+	
+	virtual ~strFileReply() {
+		if (pTarget != NULL) {
+			delete pTarget; pTarget = NULL;
+		}
+		
+		if (pHosts != NULL) {
+			while(nHops > 0) {
+				nHops--;
+				if (pHosts[nHops] != NULL) {
+					delete pHosts[nHops];
+				}
+			}
+		}
+		
+		ASSERT(nHops == 0);
+	}
+};
+
+
+
 
 
 class Node : public BaseClient
@@ -110,6 +145,7 @@ class Node : public BaseClient
     
         Address * GetServerInfo(void);
 		strFileRequest * GetFileRequest(void);
+		strFileReply * GetFileReply(void);
 		
 		void SendMsg(char *ptr, int len);
     
@@ -158,6 +194,7 @@ class Node : public BaseClient
 		} _Heartbeat;
 		
 		struct strFileRequest *_pFileRequest;
+		struct strFileReply *_pFileReply;
 		
 		Address *_pServerInfo;
 		Address *_pRemoteNode;

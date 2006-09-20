@@ -115,7 +115,8 @@ class Network : public BaseServer
         bool GetNextChunk(char *szFilename, int *nChunk);
         bool GetNextFile(char **szFilename);
 		
-		void RelayFileRequest(strFileRequest *pReq, Node *pNode);
+		void RelayFileRequest(strFileRequest *pReq);
+		void RelayFileReply(strFileReply *pReply);
     
         struct {
             bool bWebQuery;
