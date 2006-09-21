@@ -63,6 +63,7 @@ Node::Node()
 	_Data.pData		 = NULL;
 	_Data.nChunk	 = 0;
 	_Data.nSize		 = 0;
+	_Data.pFileInfo  = NULL;
 	
 	_Heartbeat.nBeats	  = 0;
 	_Heartbeat.nDelay	  = 0;
@@ -72,8 +73,6 @@ Node::Node()
 	_pFileReply   = NULL;
 	_pServerInfo  = NULL;
 	_pRemoteNode  = NULL;
-	
-	_szLocalFile  = NULL;
 }
 
 
@@ -856,9 +855,9 @@ bool Node::ProcessLocalFile(int nLength)
 		}
 		else {
 			pData = _DataIn.Pop(flen);
-			ASSERT(_szLocalFile == NULL)
-			_szLocalFile = (char *) malloc(flen + 1);
-			strncpy(_szLocalFile, pData, flen);
+			ASSERT(_Data.szFilename == NULL)
+			_Data.szFilename = (char *) malloc(flen + 1);
+			strncpy(_Data.szFilename, pData, flen);
 			free(pData);	
 		
 			bOK = true;
@@ -884,9 +883,15 @@ bool Node::ProcessLocalFile(int nLength)
 // 		<--  A<flen><length*4><file*flen>
 void Node::SendFile(char *szLocalFile, FileInfo *pInfo)
 {
+	int nLength;
+	
 	pInfo->FileStart();
+	nLength = pInfo->GetLength();
+	
 }
 
+
+//-----------------------------------------------------------------------------
 // CJW: Reply to the node that we dont have the file they are looking for.
 // 		<--  N<flen><file*flen>
 void Node::LocalFileFail(char *szLocalFile)

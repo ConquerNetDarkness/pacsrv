@@ -187,6 +187,7 @@ class Node : public BaseClient
 			char *pData;
 			int nChunk;
 			int nSize;
+			FileInfo *pFileInfo;
 		} _Data;
 		
 		struct {
