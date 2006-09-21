@@ -92,6 +92,8 @@ class FileInfo
 		int GetUseCount(void);
 		void RemoveNode(int nNode);
 		
+		int GetLength(void);
+		
     protected:
 
     private:

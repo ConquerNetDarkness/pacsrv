@@ -225,5 +225,14 @@ FileInfo * FileList::GetNextFile(void)
 }
 
 
+//---------------------------------------------------------------------
+// CJW: Return teh length of the file.  We shoudl know this, and it 
+// 		should be greater than 0.   We might not be yet, but we should 
+// 		be ignoring files if their file-size is 0.
+int FileInfo::GetLength(void)
+{	
+	ASSERT(_nFileLength > 0);
+	return _nFileLength;
+}
 
 
