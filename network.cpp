@@ -390,6 +390,7 @@ void Network::ProcessNodes(void)
 	Address *pServerInfo;
 	strFileRequest *pReq;
 	strFileReply *pReply;
+	char *szLocalFile;
     
     Lock();
     
@@ -482,6 +483,24 @@ void Network::ProcessNodes(void)
 					delete pReply;
 				}
 				
+				
+				szLocalFile = pTmp->GetLocalFile();
+				if (szLocalFile != NULL) {
+					ASSERT(_pFileList != NULL);
+					pInfo = _pFileList->GetFileInfo(szLocalFile);
+					if (pInfo == NULL) {
+						pInfo = _pFileList->LoadFile(pReq->szFile);
+					}
+					
+					if (pInfo != NULL) {
+						pTmp->SendFile(szLocalFile, pInfo);
+					}
+					else {
+						pTmp->LocalFileFail(szLocalFile);
+					}
+					
+					free(szLocalFile);
+				}
             }
             else {
                 bClosed = true;

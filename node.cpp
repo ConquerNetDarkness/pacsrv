@@ -72,6 +72,8 @@ Node::Node()
 	_pFileReply   = NULL;
 	_pServerInfo  = NULL;
 	_pRemoteNode  = NULL;
+	
+	_szLocalFile  = NULL;
 }
 
 
@@ -833,44 +835,37 @@ void Node::ReplyFileFound(strFileRequest *pReq, FileInfo *pInfo)
 // 		for any file that we have a need for.
 //
 //		-->  L<flen><file*flen>
-// 		<--  A<flen><length*4><file*flen>
-// 		<--  N<flen><file*flen>
 bool Node::ProcessLocalFile(int nLength)
 {
 	bool bProcessed;
 	unsigned char *pData;
-	struct {
-		unsigned char flen;
-		char *fname;
-	} data;
+	unsigned char flen;
 	int length;
 	
-	if (nLength > 3) {
+	if (nLength > 3 && _szLocalFile == NULL) {
 		pData = (unsigned char *) _DataIn.Pop(1);
-		data.flen = *pData;
+		flen = *pData;
 		free(pData);
 		
-		ASSERT(data.flen > 0);
+		ASSERT(flen > 0);
 		length = _DataIn.Length();
 		
-		if (length <= data.flen) {
-			_DataIn.Push(&data.flen, 1);
+		if (length <= flen) {
+			_DataIn.Push(&flen, 1);
 			_DataIn.Push("L", 1);
 		}
 		else {
-			pData = _DataIn.Pop(data.flen);
-			data.fname = (char *) malloc(data.flen + 1);
-			strncpy(data.fname, pData, data.flen);
+			pData = _DataIn.Pop(flen);
+			ASSERT(_szLocalFile == NULL)
+			_szLocalFile = (char *) malloc(flen + 1);
+			strncpy(_szLocalFile, pData, flen);
 			free(pData);	
 		
-			
-			
 			bOK = true;
 			
-			
-		// check to see if we have that file in our cache.
-		// if we do, send an (A), make note of all the details.
-		// if we dont, send an (N)
+			// we dont return anything yet.  We wait for the Network object to 
+			// notice that we have a LocalFile request to process.  When it 
+			// finds it, it will tell us how to proceed.
 		}
 	}
 	else {
@@ -878,4 +873,34 @@ bool Node::ProcessLocalFile(int nLength)
 	}
 }
 
+
+//-----------------------------------------------------------------------------
+// CJW: The node asked if we have a localfile.  The network object looked up 
+// 		our file list and determined that we have this file (or maybe part of 
+// 		it).  We need to reply to the node that we have the file (and its 
+// 		length).  Then we need to mark the file as in use, and then wait for 
+// 		the chunck requests to come in.
+//
+// 		<--  A<flen><length*4><file*flen>
+void Node::SendFile(char *szLocalFile, FileInfo *pInfo)
+{
+	pInfo->FileStart();
+}
+
+// CJW: Reply to the node that we dont have the file they are looking for.
+// 		<--  N<flen><file*flen>
+void Node::LocalFileFail(char *szLocalFile)
+{
+	unsigned char flen;
+	int length;
+
+	ASSERT(szLocalFile != NULL);
+	length = strlen(szLocalFile);
+	ASSERT(length < 255);
+	flen = (unsigned char) length;
+	 
+	_DataIn.Add("N", 1);
+	_DataIn.Add(&flen, 1);
+	_DataIn.Add(szLocalFile, length);
+}
 

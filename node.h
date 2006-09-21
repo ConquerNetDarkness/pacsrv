@@ -148,6 +148,8 @@ class Node : public BaseClient
 		strFileReply * GetFileReply(void);
 		
 		void SendMsg(char *ptr, int len);
+		void SendFile(char *szLocalFile, FileInfo *pInfo);
+		void LocalFileFail(char *szLocalFile);
     
     protected:
     
@@ -198,6 +200,8 @@ class Node : public BaseClient
 		
 		Address *_pServerInfo;
 		Address *_pRemoteNode;
+		
+		char *_szLocalFile;
 };
 
 
