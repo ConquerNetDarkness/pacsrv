@@ -12,7 +12,7 @@
 //-----------------------------------------------------------------------------
 
 /***************************************************************************
- *   Copyright (C) 2003-2005 by Clinton Webb,,,                            *
+ *   Copyright (C) 2003-2006 by Clinton Webb,,,                            *
  *   cjw@cjdj.org                                                          *
  *                                                                         *
  *   This library is free software; you can redistribute it and/or modify  *
