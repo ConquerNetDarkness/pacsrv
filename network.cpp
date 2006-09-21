@@ -272,7 +272,7 @@ void Network::CheckConnections(void)
         // go thru the list and count the number of current connections.
         count = GetConnectionCount();
     
-        // if we dont have ANY clients, then we need to query the webserver for a starter IP and port.
+        // if we dont have ANY clients, then we need to connect to the starter connection in our config.
         if (count < _Connections.nMin) {
             ConnectStarter();
         }
