@@ -405,3 +405,11 @@ bool FileInfo::IsLocal(void)
 	return(_bLocal);
 }
 
+
+//-----------------------------------------------------------------------------
+// CJW: Indicate that this file is going to be in use by a node (or client).   
+// 		We do this because we dont want this object to be destroyed before we 
+// 		have finished using it.
+void FileInfo::FileStart(void)
+{
+}
