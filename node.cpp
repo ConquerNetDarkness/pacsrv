@@ -704,13 +704,10 @@ bool Node::ProcessFileGot(int nLength)
 	
 	if (nLength > 3 && _pFileReply == NULL) {
 		pData = (unsigned char *) _DataIn.Pop(3);
-		_pFileReply = new strFileRequest;
+		_pFileReply = new strFileReply;
 		
 		_pFileReply->nHops = pData[0];
-		_pFileReply->nTtl  = pData[1];
 		_pFileReply->nFlen = pData[3];
-		
-		ASSERT(_pFileReply->nTtl > 0);
 		
 		nLen = _pFileReply->nFlen+(_pFileReply->nHops * 6);
 		if (nLength >= 3+nLen) {
@@ -760,14 +757,14 @@ strFileRequest * Node::GetFileRequest(void)
 //-----------------------------------------------------------------------------
 // CJW: If we received a file reply from the node, we would have stored it.  
 // 		We will return control of this file reply to the caller.  
-strFileRequest * Node::GetFileReply(void)
+strFileReply * Node::GetFileReply(void)
 {
-	strFileRequest *pReq;
+	strFileReply *pReply;
 	
-	pReq = _pFileReply;
+	pReply = _pFileReply;
 	_pFileReply = NULL;
 	
-	return(pReq);
+	return(pReply);
 }
 
 
@@ -802,19 +799,19 @@ void Node::ReplyFileFound(strFileRequest *pReq, FileInfo *pInfo)
 	// First we build our message because it is going to be the same for each node.
 	i=0;
 	buffer[i++] = 'G';
-	buffer[i++] = pReply->nHops;
-	buffer[i++] = pReply->nFlen;
+	buffer[i++] = pReq->nHops;
+	buffer[i++] = pReq->nFlen;
 	
-	for (j=0; j< pReply->nFlen; j++) {
-		buffer[i++] =  pReply->szFile[j];
+	for (j=0; j< pReq->nFlen; j++) {
+		buffer[i++] =  pReq->szFile[j];
 	}
 	
 	ASSERT(_pServerInfo != NULL);
 	_pServerInfo->Get(&buffer[i]);
 	i +=  6;
 	
-	for (j=0; j<pReply->nHops; j++) {
-		pReply->pHosts[j]->Get(&buffer[i]);
+	for (j=0; j<pReq->nHops; j++) {
+		pReq->pHosts[j]->Get(&buffer[i]);
 		i += 6;
 	}
 	
@@ -836,7 +833,7 @@ void Node::ReplyFileFound(strFileRequest *pReq, FileInfo *pInfo)
 //		-->  L<flen><file*flen>
 bool Node::ProcessLocalFile(int nLength)
 {
-	bool bProcessed;
+	bool bProcessed=false;
 	unsigned char *pData;
 	unsigned char flen;
 	int length;
@@ -850,17 +847,17 @@ bool Node::ProcessLocalFile(int nLength)
 		length = _DataIn.Length();
 		
 		if (length <= flen) {
-			_DataIn.Push(&flen, 1);
+			_DataIn.Push((char *)&flen, 1);
 			_DataIn.Push("L", 1);
 		}
 		else {
-			pData = _DataIn.Pop(flen);
+			pData = (unsigned char *) _DataIn.Pop(flen);
 			ASSERT(_Data.szFilename == NULL)
 			_Data.szFilename = (char *) malloc(flen + 1);
-			strncpy(_Data.szFilename, pData, flen);
+			strncpy(_Data.szFilename, (char *) pData, flen);
 			free(pData);	
 		
-			bOK = true;
+			bProcessed = true;
 			
 			// we dont return anything yet.  We wait for the Network object to 
 			// notice that we have a LocalFile request to process.  When it 
@@ -870,6 +867,24 @@ bool Node::ProcessLocalFile(int nLength)
 	else {
 		_DataIn.Push("L", 1);
 	}
+	
+	return (bProcessed);
+}
+
+
+//-----------------------------------------------------------------------------
+// CJW: Return the local file lookup, if there is one.  We return the string 
+// 		if we have one ready.  
+char *Node::GetLocalFile(void) 
+{
+	char *ptr = NULL;
+	
+	if (_Data.pFileInfo == NULL && _Data.szFilename != NULL) {
+		ptr = _Data.szFilename;
+		_Data.szFilename = NULL;
+	}
+	
+	return(ptr);
 }
 
 
@@ -887,7 +902,7 @@ void Node::SendFile(char *szLocalFile, FileInfo *pInfo)
 	
 	pInfo->FileStart();
 	nLength = pInfo->GetLength();
-	
+	TODO("Incomplete");
 }
 
 
@@ -905,7 +920,7 @@ void Node::LocalFileFail(char *szLocalFile)
 	flen = (unsigned char) length;
 	 
 	_DataIn.Add("N", 1);
-	_DataIn.Add(&flen, 1);
+	_DataIn.Add((char *) &flen, 1);
 	_DataIn.Add(szLocalFile, length);
 }
 

@@ -148,6 +148,8 @@ class Node : public BaseClient
 		strFileReply * GetFileReply(void);
 		
 		void SendMsg(char *ptr, int len);
+		
+		char *GetLocalFile(void);
 		void SendFile(char *szLocalFile, FileInfo *pInfo);
 		void LocalFileFail(char *szLocalFile);
     
