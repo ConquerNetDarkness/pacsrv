@@ -1,0 +1,23 @@
+The script on the website is used to help client find some other nodes 
+on the network to start communicating and build up an internal server 
+list.
+
+This script will try to be as simple as possible, and use the least 
+amount of resources as possible.
+
+The script will basically do this.
+
+1.  Receive request from client to get an IP.  Client will pass a 
+parameter which is the port it listens on.
+
+2.  Site will look in its network.txt file, randomly choose 3 entries in 
+that file, and send them back to the client.
+
+3.  Site will add that client's IP and port (that was supplied) to the 
+network-next.txt file
+
+4.  Every 5 minutes, a cron job will run which very simply removes the 
+network.txt file, and then renames the network-next.txt file after first 
+removing any duplicate entries.  
+
+5.  That is all.
