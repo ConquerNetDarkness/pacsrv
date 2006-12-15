@@ -1,0 +1,115 @@
+Pacsrv Communications Protocol.
+
+I toyed with the idea of using XML to encapsulate the transfer protocol, but decided to use a simple, communications protocol with very little overhead.  It is designed to be most optimal when a large number of nodes can provide parts of a file, even if each individual node can only transfer at slow rates.   It is not really optimised for high speed transfer from one node to another node.  Some tweaks may be added later, and the protocol itself doesnt stop a client from asking for multiple chunks of a file at a time, etc.
+
+-------------------------------------------------------------------------
+
+Communications from the User client will use a very simple and moronic protocol.   Also, it is not designed to be resistant to network dropouts because it is expected that in almost all instances, the client is on the same machine as the server.  However, if people tend to use a central machine as the package server and all clients connect directly to it, then some hardening of this protocol might be desired (and some functionality added to the server to actually store the packages that it receives).
+
+Client -> Server commands
+
+I - Initialisation.  Will provide a two byte version code (protocol version, no software version).
+    eg.  I<0x00><0x00>
+    
+H - Heartbeat.  No other values.
+
+F - File request.  Will have a 1 byte length, followed by an ASCII filename of max 255 chars (1 byte max).
+    eg.  F<0x10>hwd-4.7.1-1.pkg.tar.gz
+    
+R - Chunk received confirmation. Will contain the 2 byte chunk value.  
+    In this example, we are confirming chunk 4146 (0x1032).
+    eg.  R<0x10><0x32>
+
+Server -> Client commands.
+
+V - Version Valid.
+
+Q - Quit the connection.  Most likely because the version is incompatible.
+
+H - Heartbeat.  No other values.
+
+X - File doesnt exist.  This is a good close, rather than Q which indicates a failure.
+
+L - Length of the file.  First command following a File request.  Length is 4 bytes.
+    eg.  L<0x32><0x34><0x11><0xe2>
+    is 0x323411e2 (cannot be directly dropped into a long, must be translated)
+
+C - Chunk data.  We provide a chunk number (2 bytes), 
+    followed by the length of the chunk (2 bytes).
+    After that we will send the chunk data.
+    eg.  C<0x00><0x00><0x00><0xff>ljkndsfolknfdslkjnsgfdlknslfdknldsknflkndsf...
+
+After the last chunk is received, the client will close the connection with the server.  The server will not close the connection unless the heartbeats fail.
+
+If we get any other command characters other than the ones we have listed here, then we will simply close the connection because the stream got corrupted.  We will let the pacman tool figure out if the file is corrupt or not.
+
+
+-------------------------------------------------------------------------------
+
+The Network/Node protocol will be a bit more complex.
+
+It is a simple text based protocol with fixed-length binary fields.
+
+All messages are singular, and not necessarily confirmation based.  This means that the message can be sent or received at almost any time.  
+
+Only one file transfer can be done per node at a time, but file requests can still be received, and be passed on.   If the node has the file, it will be stored in a queue of files to transfer, and after the current file is completed, it will attempt to connect to the node and send the file.  If the node has already received the file, it wont have any chunks to request, so the connection will close, and the server can try to send the next file in the list.
+
+The file will be send over the network in chunks of 32kb.  Basically when a client asks its daemon for a file. The daemon will send a File Request (F) to all the nodes that are actively connected to that daemon.  Those nodes will send the request on to all other nodes, and so on.   Any node that has the file, will send a File Notice (N) back to the daemon to say that it has the file.  The daemon will then connect to that node directly, and first initiate a download of the file, and then request chunks of the file.  It will do that for all the nodes that reply.
+
+The File Request telegram will also contain a node-path so that the reply can be routed back to the originating deamon.  This is required, because we want the daemon to be the one to connect to the node, rather than the other way round, we dont want to allow the system to be used to trick a node into connecting to a system that it shouldn't although this is still possible, but a bit more restrictive.  Also, we want people behind NAT's and firewalls to still be able to download even if they cant contribute to the network.
+
+When a new node connection is made with the daemon, it first ensures the initialisation, and then sends the Server list telegram to the connection.  It then will go thru its list of outstanding files asking the connection if it has each one.  If the connection does, then it will start asking for chunks that it hasnt received yet.  When the file list is completed, it will not ask any more and will just let the connection go idle.
+
+Chunk downloading will be a bit complicated, and will be handled by the actual Network object.  It will go thru the list of filenames we need to download, and will ask each node to download it.  If the node has already asked, and is downloading that file, it will ask for the chunk.  If the node is not in a state to ask for that file, then it will not do it.
+
+
+INITIALISATION
+    -->  I<ver><port*2>
+    <--  V          -- version ok.
+    <--  Q          -- version not ok.
+
+    The connecting node will send this telegram when it first connects.  We cannot communicate if we dont have the same protocol.  If all is good, server sends back a V telegram.  If not, then server sends Q and then closes the connection.   If we ever end up with a need for more than 254 versions, the 0xff version number can be used to indicate that the next field is an extra version field, and this could go on forever.... of course, it is highly unlikely that we would end up with so many protocol changes that we run into this problem.
+    
+SERVER LIST
+    -->  S<server*4><port*2>
+
+    After INIT, the server will send to the client an address of another server on the network and then will initiate a 5 minute timer to repeat the process.   Eventually all the nodes will be able to know about all the other nodes, so it can re-connect if it needs to.  This will happen even if the node is only connecting to get a file (so maybe we can set an initial timer of 5 or 10 seconds or something to see what the node is intending to do, or we can include a flag in the INIT hand-shake).
+
+PING
+    -->  P
+    <--  R
+    
+    We will want to keep our network connections active, so a PING will be sent every 5 seconds.  A P or an R telegram will reset the heartbeat timeout counter, so you could really just send out R's all the time and keep the connection open if you dont want a reply.  However, at some point the software will be trying to make the network more efficient and localised by nodes based on network latency (so all nodes for a particular country would tend to be grouped together rather than randomly connected to nodes all over the planet).  During normal operations both nodes in the connection will be sending P/R messages back and forth if no actual data is being transferred.    We could use a simple keep-alive system instead, but then we wouldnt have the opportunity for the network latency testing.
+    
+FILE REQUEST 
+    -->  F<hops><ttl><flen><file*flen><host*6>...<host*6>
+    <--  G<hops><flen><file*flen><target*6><host*6>...<host*6>
+    
+    The server, when it receives an 'F', checks to see if it has the file.  If it does, it returns the message back to the node it was received from, almost identicle to what it received (except it has an added <target> parameter.  That node will trim off its details and resend the message to the last host in the list (assuming it is still a client of that node).  The reply message should eventually get back to the daemon that actually made the request.  The host and target parameters are 6 byte ip and port values.  the port being the last two bytes.   The File request is modified to include the current node, and is passed on to all other nodes that arent already in this list.
+    
+    The reason that we actually send the G message back thru the network is because we want the requesting node to actually be the one that makes connections to the nodes that have the file.
+      
+    If a G message is sent back, we still want to pass the request on to the rest of the networks, but only those that have not been listed in the message path already.  The entire network (ttl levels deep) should respond with details about getting that file, not just the first one that happens to have it.
+
+LOCAL FILE REQUEST
+    -->  L<flen><file*flen>
+    <--  A<flen><length*4><file*flen>
+    <--  N<flen><file*flen>
+    
+    When the daemon has sent a file request and received connection information about a node that has the file, the daemon will send the (L) telegram.  Actually, every time we connect to another node, we will send a request for all the files that we are trying to fulfull.   If the node has the file, it will return an (A) telegram.  If it doesnt have the file it will send an (N) telegram.  If we connect to a server we will send this command immediately after all initialisation is done.   If the node connected to us, we will wait 2 seconds and then ask them for any file that we have a need for.
+
+CHUNK REQUEST
+    -->  C<chunk*2>
+    <--  D<chunk*2><len*2><data*len>
+    
+    This telegram is only allowed after a successful (L) telegram.  If we send a (C) telegram when it is not appropriate, the node will terminate the connection with us.  The D telegram can only reply to a chunk that we have asked for.   We could actually improve performance of this, because we could provide a list of chunks instead of just one.  The problem with this is, how do we know this connection is the fastest.  The system will not wait for the chunk to finish before asking other nodes for the other chunks we need.  Therefore, even if one of the nodes is very slow, it still should be able to transfer the 32kb of data in a reasonable time.
+    
+    It is assumed that we will be able to keep stats on the performance of each node, and therefore we will know which ones provide good performance, and therefore which ones to ask, but since most of the packages we will be downloading will likely be a few megs, I dont know if we will be able to get enough stats to make a difference.
+    
+    The fact that we will be asking chunks from a large number of connections, the aggregate download should get pretty high as we will ask chunks from the nodes as quickly as we can.
+    
+LOCAL FILE COMPLETE
+    -->  K
+    
+    This lets the node know that we have completed all requests for that file.  Even if we have another file request we must send this telegram first.   
+
