@@ -164,55 +164,48 @@ void Node::SetID(int nID)
 //      If we process any data, then we will return a true, otherwise we will
 //      return a false.   The return value does not indicate the status of the
 //      node.
-bool Node::Process(void)
+int Node::OnReceive(char *pData, int nLength)
 {
-    bool bProcessed = false;
-    char cCommand;
-    int nLength;
+    int nProcessed = 0;
     Logger *pLogger;
     
-	ReadData();
+    ASSERT(pData != NULL && nLength > 0);
     
-	nLength = _DataIn.Length();
-	if (nLength > 0) {
-		cCommand = GetCommand();
-		nLength--;
+    Lock();
+    
+	switch (pData[0]) {
 
-		switch (cCommand) {
+		case 'I':   nProcessed = ProcessInit(pData, nLength);          break;
+		case 'V':   nProcessed = ProcessValid(pData, nLength);         break;
+		case 'Q':   nProcessed = ProcessQuit(pData, nLength);          break;
+		case 'S':   nProcessed = ProcessServer(pData, nLength);        break;
+		case 'P':   ProcessPing(); 		nProcessed = 1;			       break;
+		case 'R':   ProcessPingReply();	nProcessed = 1;				   break;
+		case 'F':   nProcessed = ProcessFileRequest(pData, nLength);   break;
+		case 'G':   nProcessed = ProcessFileGot(pData, nLength);       break;
+		case 'L':   nProcessed = ProcessLocalFile(pData, nLength);     break;
+		case 'A':   nProcessed = ProcessLocalOK(pData, nLength);       break;
+		case 'N':   nProcessed = ProcessLocalFail(pData, nLength);     break;
+		case 'C':   nProcessed = ProcessChunkRequest(pData, nLength);  break;
+		case 'D':   nProcessed = ProcessChunkData(pData, nLength);     break;
+		case 'K':   nProcessed = ProcessFileComplete(pData, nLength);  break;
 
-			case 'I':   bProcessed = ProcessInit(nLength);          break;
-			case 'V':   bProcessed = ProcessValid(nLength);         break;
-			case 'Q':   bProcessed = ProcessQuit(nLength);          break;
-			case 'S':   bProcessed = ProcessServer(nLength);        break;
-			case 'P':   bProcessed = ProcessPing(nLength);          break;
-			case 'R':   bProcessed = ProcessPingReply(nLength);     break;
-			case 'F':   bProcessed = ProcessFileRequest(nLength);   break;
-			case 'G':   bProcessed = ProcessFileGot(nLength);       break;
-			case 'L':   bProcessed = ProcessLocalFile(nLength);     break;
-			case 'A':   bProcessed = ProcessLocalOK(nLength);       break;
-			case 'N':   bProcessed = ProcessLocalFail(nLength);     break;
-			case 'C':   bProcessed = ProcessChunkRequest(nLength);  break;
-			case 'D':   bProcessed = ProcessChunkData(nLength);     break;
-			case 'K':   bProcessed = ProcessFileComplete(nLength);  break;
-
-			default:
-				pLogger = new Logger;
-				pLogger->System("[Node:%d] Unexpected command.  '%c'", _nID, cCommand);
-				delete pLogger;
-				bProcessed = false;
-				break;
-		}
+		default:
+			pLogger = new Logger;
+			pLogger->System("[Node:%d] Unexpected command.  '%c'", _nID, pData[0]);
+			delete pLogger;
+			nProcessed = 1;
+			// TODO: Should we close the connection?
+			break;
+	}
 		
-		if (bProcessed == true) {
-			_Heartbeat.nBeats = 0;
-		}
+	if (nProcessed > 0) {
+		_Heartbeat.nBeats = 0;
 	}
 
 	ProcessHeartbeat();
 
-	SendData();
-    
-    return(bProcessed);
+    return(nProcessed);
 }
 
 
@@ -310,7 +303,7 @@ void Node::RequestChunk(int nChunk)
 	tele[2] = nChunk & 0xff;
 	
 	ASSERT(sizeof(tele) == 3);
-	_DataOut.Add((char *)tele, sizeof(tele));
+	Send((char *)tele, sizeof(tele));
 	
 	if (_Data.pData != NULL) {
 		ASSERT(_Data.nSize > 0);
@@ -335,7 +328,7 @@ void Node::FileComplete(void)
 {
 	ASSERT(_Data.szFilename != NULL);
 	
-	_DataOut.Add("K", 1);
+	Send("K", 1);
 	free(_Data.szFilename);
 	_Data.szFilename = NULL;
 	
@@ -387,9 +380,9 @@ void Node::RequestFile(char *szFilename)
 	ASSERT(nLength < 256);
 	data.nLen = (unsigned char) nLength;
 	
-	_DataOut.Add("L", 1);
-	_DataOut.Add((char *)&data.nLen, 1);
-	_DataOut.Add(szFilename, nLength);
+	Send("L", 1);
+	Send((char *)&data.nLen, 1);
+	Send(szFilename, nLength);
 	
 	_Data.szFilename = (char *) malloc(nLength + 1);
 	strncpy(_Data.szFilename, szFilename, nLength);
@@ -450,7 +443,7 @@ void Node::RequestFileFromNetwork(char *szFilename)
 	strncpy((char *)&data.buffer[nTmp], szFilename, data.nFlen);
 	nTmp += data.nFlen;
 	
-	_DataOut.Add((char *)data.buffer, nTmp);
+	Send((char *)data.buffer, nTmp);
 }
 
 
@@ -461,12 +454,14 @@ void Node::RequestFileFromNetwork(char *szFilename)
 // 		INIT, we should close the socket.  If we successfully process some 
 // 		data, then we will return true.  Oherwise we will return a false to 
 // 		indicate that all that data was not yet available.
-bool Node::ProcessInit(int nLength)
+int Node::ProcessInit(char *pData, int nLength)
 {
-	bool bOK = false;
-	unsigned char *pData;
+	int nProcessed = 0;
 	char szBuffer[32];
 	int nPort;
+	unsigned char *pTmp;
+	
+	ASSERT(pData != NULL && nLength > 0);
 	
 	ASSERT(_Status.bClosed == false);
 	ASSERT(_Status.bValid == false);
@@ -475,29 +470,30 @@ bool Node::ProcessInit(int nLength)
 	ASSERT(_pRemoteNode == NULL);
 	
 	if (nLength >= 3) {
-		pData = (unsigned char *) _DataIn.Pop(3);
 		
 		// Need to actually check the version number, if it is acceptable, 
 		// then we send a "V", otherwise we send a "Q"
-		if (pData[0] == 0x01)	{ 
-			_DataOut.Add("V", 1); 
+		if (pData[1] == 0x01)	{ 
+			Send("V", 1); 
 			_Status.bValid = true;
 			
-			nPort = (pData[1] << 8) + pData[2];
+			pTmp = (unsigned char *) pData;
+			nPort = (pTmp[2] << 8) + pTmp[3];
+			ASSERT(nPort > 0 && nPort < 65536);
 			GetPeerName(szBuffer, 32);
 			
 			_pRemoteNode = new Address;
 			_pRemoteNode->Set(szBuffer, nPort);
+			
 		}
 		else { 
-			_DataOut.Add("Q", 1); 
+			Send("Q", 1); 
 		}
 		
-		free(pData);
-		bOK = true;
+		nProcessed = 3;
 	}
 	
-	return(bOK);
+	return(nProcessed);
 }
 
 
@@ -505,16 +501,18 @@ bool Node::ProcessInit(int nLength)
 // CJW: We got a "V" reply to our "I" request.  In otherwords, our protocol has 
 // 		been validated as acceptable.  We will always return true, because 
 // 		there is no more data that we need to get for this instruction.
-bool Node::ProcessValid(int nLength)
+int Node::ProcessValid(char *pData, int nLength)
 {
 	ASSERT(_Status.bClosed == false);
 	ASSERT(_Status.bValid == false);
 	ASSERT(_Status.bInit == true);
 	ASSERT(_Status.bAccepted == false);
+	ASSERT(pData != NULL && nLength > 0);
+	ASSERT(pData[0] == 'V');
 	
 	_Status.bValid = true;
 	
-	return(true);
+	return(1);
 }
 
 
@@ -522,15 +520,18 @@ bool Node::ProcessValid(int nLength)
 // CJW: The node is telling us to disconnect from them.  We will always return 
 // 		true, because there is no more data that we need to get for this 
 // 		instruction.
-bool Node::ProcessQuit(int nLength)
+int Node::ProcessQuit(char *pData, int nLength)
 {
 	ASSERT(_Status.bClosed == false);
 	ASSERT(_Status.bAccepted == false);
 	
+	ASSERT(pData != NULL && nLength > 0);
+	ASSERT(pData[0] == 'Q');
+	
 	Close();
 	_Status.bClosed = true;
 	
-	return(true);	
+	return(1);	
 }
 
 
@@ -538,31 +539,23 @@ bool Node::ProcessQuit(int nLength)
 // CJW: We've received some server info from the node.  We save it in our 
 // 		server buffer.  If there is already one there, we put the data back, 
 // 		and process it again another time.
-bool Node::ProcessServer(int nLength)
+int Node::ProcessServer(char *pData, int nLength)
 {
-	bool bOK = false;
-	unsigned char *pData;
+	int nProcessed = 0;
 	
 	ASSERT(_Status.bClosed == false);
 	ASSERT(_Status.bValid == true);
+	ASSERT(pData != NULL && nLength > 0);
 	
-	if (nLength >= 6) {
+	if (nLength >= 7) {
 		if (_pServerInfo == NULL) {
-			pData = (unsigned char *) _DataIn.Pop(6);
 			_pServerInfo = new Address;
-			_pServerInfo->Set(pData);
-			free(pData);
-			bOK = true;
+			_pServerInfo->Set((unsigned char *) &pData[1]);
+			nProcessed = 7;
 		}
-		else {
-			_DataIn.Push("S", 1);
-		}
-	}
-	else {
-		_DataIn.Push("S", 1);
 	}
 	
-	return(bOK);
+	return(nProcessed);
 }
 
 
@@ -586,7 +579,7 @@ void Node::ProcessHeartbeat(void)
 				_Status.bClosed = true;
 			}
 			else {
-				_DataOut.Add("P", 1);
+				Send("P", 1);
 			}
 		}
 	}
@@ -596,27 +589,24 @@ void Node::ProcessHeartbeat(void)
 //-----------------------------------------------------------------------------
 // CJW: We should receive ping messages from the node every so many seconds.  
 // 		If we do, we simply reply with a ping reply.
-bool Node::ProcessPing(int nLength)
+void Node::ProcessPing()
 {
 	ASSERT(_Status.bClosed == false);
 	ASSERT(_Status.bValid == true);
-	ASSERT(nLength >= 0);
 	
-	_DataOut.Add("R", 1);
-	
-	return(true);
+	Send("R", 1);
 }
 
 
 //-----------------------------------------------------------------------------
 // CJW: We should receive ping messages from the node every so many seconds.  
 // 		If we do, we simply reply with a ping reply.
-bool Node::ProcessPingReply(int nLength)
+void Node::ProcessPingReply(void)
 {
 	ASSERT(_Status.bClosed == false);
 	ASSERT(_Status.bValid == true);
-	ASSERT(nLength >= 0);
-	return(true);
+	
+	// we could add some logic to determine the latency time for a connection, but we will leave that for a later version because it can be a bit complicated to implement.
 }
 
 
@@ -631,38 +621,41 @@ bool Node::ProcessPingReply(int nLength)
 // 		processed, it will stay in our incoming queue.
 //
 //		-->  F<hops><ttl><flen><file*flen><host*6>...<host*6>
-bool Node::ProcessFileRequest(int nLength)
+int Node::ProcessFileRequest(char *pData, int nLength)
 {
-	bool bOK = false;
-	unsigned char *pData = NULL;
-	int nLen, i;
+	int nProcessed = 0;
+	unsigned char *pTmp = NULL;
+	int i;
+	
+	ASSERT(pData != NULL && nLength > 0);
+	ASSERT(pData[0] == 'F');
 	
 	ASSERT(_Status.bClosed == false);
 	ASSERT(_Status.bValid == true);
 	
 	if (nLength > 3 && _pFileRequest == NULL) {
-		pData = (unsigned char *) _DataIn.Pop(3);
+		pTmp = (unsigned char *) &pData[1];
+		
 		_pFileRequest = new strFileRequest;
-		
-		_pFileRequest->nHops = pData[0];
-		_pFileRequest->nTtl  = pData[1];
-		_pFileRequest->nFlen = pData[3];
-		
+		_pFileRequest->nHops = pTmp[0];
+		_pFileRequest->nTtl  = pTmp[1];
+		_pFileRequest->nFlen = pTmp[2];
 		ASSERT(_pFileRequest->nTtl > 0);
+		ASSERT(_pFileRequest->nFlen > 0);
 		
-		nLen = _pFileRequest->nFlen+(_pFileRequest->nHops * 6);
-		if (nLength >= 3+nLen) {
-			free(pData);
-			pData = (unsigned char *) _DataIn.Pop(nLen);
+		nProcessed = 4;
+		if (nLength >= 4+_pFileRequest->nFlen+(_pFileRequest->nHops * 6)) {
 			
-			memcpy(_pFileRequest->szFile, pData, _pFileRequest->nFlen);
+			memcpy(_pFileRequest->szFile, &pTmp[3], _pFileRequest->nFlen);
 			_pFileRequest->szFile[_pFileRequest->nFlen] = '\0';
+			nProcessed += _pFileRequest->nFlen;
 			
 			_pFileRequest->pHosts = (Address **) malloc(sizeof(Address*) * (_pFileRequest->nHops + 1));
 			
 			for (i=0; i < _pFileRequest->nHops; i++) {
 				_pFileRequest->pHosts[i] = new Address;
-				_pFileRequest->pHosts[i]->Set(&pData[_pFileRequest->nFlen + (i*6)]);
+				_pFileRequest->pHosts[i]->Set(&pTmp[_pFileRequest->nFlen + (i*6)]);
+				nProcessed += 6;
 			}
 			
 			ASSERT(_pServerInfo != NULL);
@@ -670,22 +663,14 @@ bool Node::ProcessFileRequest(int nLength)
 			_pFileRequest->pHosts[_pFileRequest->nHops]->Set(_pServerInfo);
 			_pFileRequest->nHops++;
 			_pFileRequest->nTtl--;
-			
-			bOK = true;
 		}
 		else {
-			_DataIn.Push((char *) pData, 3);
+			nProcessed = 0;
 		}
-
-		if (pData != NULL) {
-			free(pData);
-		}
-	}
-	else {
-		_DataIn.Push("F", 1);
 	}
 	
-	return (bOK);
+	ASSERT(nProcessed == 0 || nProcessed > 5);
+	return (nProcessed);
 }
 
 
@@ -693,50 +678,55 @@ bool Node::ProcessFileRequest(int nLength)
 // CJW: We have asked the other node for a particular file, and it has returned 
 // 		an answer.  We need to save the message so that the Network object can 
 // 		retrieve it, and pass it to the appropriate node.
-bool Node::ProcessFileGot(int nLength)
+int Node::ProcessFileGot(char *pData, int nLength)
 {
-	bool bOK = false;
-	unsigned char *pData = NULL;
-	int nLen, i;
+	int nProcessed = 0;
+	unsigned char *pTmp = NULL;
+	int i;
 	
+	ASSERT(pData != NULL && nLength > 0);
+	ASSERT(pData[0] == 'G');
 	ASSERT(_Status.bClosed == false);
 	ASSERT(_Status.bValid == true);
 	
 	if (nLength > 3 && _pFileReply == NULL) {
-		pData = (unsigned char *) _DataIn.Pop(3);
+		pTmp = (unsigned char *) &pData[1];
 		_pFileReply = new strFileReply;
 		
-		_pFileReply->nHops = pData[0];
-		_pFileReply->nFlen = pData[3];
+		_pFileReply->nHops = *(pTmp++);
+		_pFileReply->nFlen = *(pTmp++);
+		nProcessed = 3;
 		
-		nLen = _pFileReply->nFlen+(_pFileReply->nHops * 6);
-		if (nLength >= 3+nLen) {
-			free(pData);
-			pData = (unsigned char *) _DataIn.Pop(nLen);
+		if (nLength >= 3+_pFileReply->nFlen+(_pFileReply->nHops * 6)) {
 			
-			memcpy(_pFileReply->szFile, pData, _pFileReply->nFlen);
+			memcpy(_pFileReply->szFile, &pTmp[2], _pFileReply->nFlen);
 			_pFileReply->szFile[_pFileReply->nFlen] = '\0';
+			nProcessed += _pFileReply->nFlen;
+			pTmp += _pFileReply->nFlen;
+			
+			_pFileReply->pTarget = new Address;
+			_pFileReply->pTarget->Set(pTmp);
+			nProcessed += 6;
+			pTmp += 6;
 			
 			_pFileReply->pHosts = (Address **) malloc(sizeof(Address*) * (_pFileReply->nHops));
-			
 			for (i=0; i < _pFileReply->nHops; i++) {
 				_pFileReply->pHosts[i] = new Address;
-				_pFileReply->pHosts[i]->Set(&pData[_pFileReply->nFlen + (i*6)]);
+				_pFileReply->pHosts[i]->Set(pTmp);
+				nProcessed += 6;
+				pTmp += 6;
 			}
-			
-			bOK = true;
 		}
 		else {
-			_DataIn.Push((char *) pData, 3);
+			nProcessed = 0;
 		}
-
-		if (pData != NULL) { free(pData); }
 	}
 	else {
-		_DataIn.Push("G", 1);
+		ASSERT(nProcessed == 0);
 	}
 	
-	return (bOK);
+	ASSERT(nProcessed == 0 || nProcessed > 4);
+	return (nProcessed);
 }
 
 
@@ -777,7 +767,7 @@ void Node::SendMsg(char *ptr, int len)
 	ASSERT(ptr != NULL);
 	ASSERT(len > 0);
 	
-	_DataOut.Add(ptr, len);
+	Send(ptr, len);
 }
 
 
@@ -831,33 +821,30 @@ void Node::ReplyFileFound(strFileRequest *pReq, FileInfo *pInfo)
 // 		for any file that we have a need for.
 //
 //		-->  L<flen><file*flen>
-bool Node::ProcessLocalFile(int nLength)
+int Node::ProcessLocalFile(char *pData, int nLength)
 {
-	bool bProcessed=false;
-	unsigned char *pData;
+	int nProcessed=0;
+	unsigned char *pTmp;
 	unsigned char flen;
-	int length;
+	
+	ASSERT(pData != NULL && nLength > 0);
+	ASSERT(pData[0] == 'L');
 	
 	if (nLength > 3 && _szLocalFile == NULL) {
-		pData = (unsigned char *) _DataIn.Pop(1);
-		flen = *pData;
-		free(pData);
+		pTmp = (unsigned char *) &pData[1];
+		flen = *pTmp;
+		
+		nProcessed = 2;
 		
 		ASSERT(flen > 0);
-		length = _DataIn.Length();
 		
-		if (length <= flen) {
-			_DataIn.Push((char *)&flen, 1);
-			_DataIn.Push("L", 1);
-		}
-		else {
-			pData = (unsigned char *) _DataIn.Pop(flen);
+		if (nLength >= 2 + flen) {
 			ASSERT(_Data.szFilename == NULL)
 			_Data.szFilename = (char *) malloc(flen + 1);
-			strncpy(_Data.szFilename, (char *) pData, flen);
-			free(pData);	
+			strncpy(_Data.szFilename, (char *) &pData[2], flen);
+			_Data.szFilename[flen] = '\0';
 		
-			bProcessed = true;
+			nProcessed += flen;
 			
 			// we dont return anything yet.  We wait for the Network object to 
 			// notice that we have a LocalFile request to process.  When it 
@@ -865,10 +852,11 @@ bool Node::ProcessLocalFile(int nLength)
 		}
 	}
 	else {
-		_DataIn.Push("L", 1);
+		ASSERT(nProcessed == 0);
 	}
 	
-	return (bProcessed);
+	ASSERT(nProcessed == 0 || nProcessed >= 3);
+	return (nProcessed);
 }
 
 
@@ -919,8 +907,64 @@ void Node::LocalFileFail(char *szLocalFile)
 	ASSERT(length < 255);
 	flen = (unsigned char) length;
 	 
-	_DataIn.Add("N", 1);
-	_DataIn.Add((char *) &flen, 1);
-	_DataIn.Add(szLocalFile, length);
+	Send("N", 1);
+	Send((char *) &flen, 1);
+	Send(szLocalFile, length);
+}
+
+
+//-----------------------------------------------------------------------------
+// CJW: When the peer-daemon has sent a file request and received connection 
+// 		information about a node that has the file, the daemon will send the 
+// 		(L) telegram.  Actually, every time we connect to another node, we will 
+// 		send a request for all the files that we are trying to fulfull.   If 
+// 		the node has the file, it will return an (A) telegram.  If it doesnt 
+// 		have the file it will send an (N) telegram.  If we connect to a server 
+// 		we will send this command immediately after all initialisation is done.   
+// 		If the node connected to us, we will wait 2 seconds and then ask them 
+// 		for any file that we have a need for.
+//
+//		In this case, we have received a confirmation from the peer that it 
+//		has the file, and we could begin asking it for chunks.
+//     
+//     <--  A<flen><length*4><file*flen>
+int Node::ProcessLocalOK(char *pData, int nLength)
+{
+	int nProcessed = 0;
+	char szFilename[256];
+	int len;
+	unsigned char *pTmp;
+	
+	ASSERT(pData != NULL && nLength > 0);
+	ASSERT(pData[0] == 'A');
+	
+	if (nLength > 6) {
+		pTmp = (unsigned char *) &pData[1];
+		len = pTmp[0];
+	
+		if (nLength >= 6+len) {
+			nProcessed = 6+len;
+	
+			ASSERT(len > 0 && len < 256);
+			strncpy(szFilename, &pData[6], len);
+			szFilename[len] = '\0';
+	
+			len = 0;
+			len += ((unsigned char) pData[2]) << 24;
+			len += ((unsigned char) pData[3]) << 16;
+			len += ((unsigned char) pData[4]) << 8;
+			len +=  (unsigned char) pData[5];
+
+			ASSERT(_Data.pFileInfo == NULL);
+			_Data.pFileInfo = new FileInfo;
+			ASSERT(_Data.pFileInfo != NULL);
+			
+			_Data.pFileInfo->SetFile(szFilename);
+			_Data.pFileInfo->SetLength(len);
+		}
+	}
+		
+	ASSERT(nProcessed == 0 || nProcessed > 6);
+	return(nProcessed);
 }
 

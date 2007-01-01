@@ -50,10 +50,12 @@
 //      actually received any data from the client, we have an UNKNOWN state.
 Client::Client()
 {
+	Lock();
     _szQuery  = NULL;
     _nChunk   = 0;
     _nLength  = 0;
     _nVersion = 0;
+    Unlock();
 }
 
 
@@ -61,12 +63,24 @@ Client::Client()
 // CJW: Deconstructor.  Clean up everything we created.  
 Client::~Client()
 {
+	Unlock();
     if (_szQuery != NULL) {
         free(_szQuery);
         _szQuery = NULL;
     }
+   	Lock();
 }
 
+
+void Client::OnIdle(void)
+{
+	if (ProcessHeartbeat() == false) {
+		Close();
+	}
+	else {
+		DpSocketEx::OnIdle();
+	}
+}
 
 
 //-----------------------------------------------------------------------------
@@ -84,64 +98,56 @@ Client::~Client()
 //      one data command at a time.  If there are more than one telegram ready
 //      to process it will be ok, because we will quickly get another chance to
 //      process.
-bool Client::Process(bool bCheck)
+int Client::OnReceive(char *pData, int nLength)
 {
-    bool bOK = true;
-    int nLength;
-    char cCommand;
+    int nProcessed = 0;
+    int nTmp;
     
+    ASSERT(pData != NULL && nLength > 0);
     
-    // read data from the socket.
-    bOK = ReadData();
+    Lock();
     
-    // process the first telegram in our data queue.
-    if (bOK != false) {
-		
-        nLength = _DataIn.Length();
-        if (nLength >= 1) {
-            cCommand = GetCommand();
-            nLength --;
-    
-            switch(cCommand) {
-                case 'I':       // INIT
-                    bOK = ProcessInit(nLength);
-                    break;
-    
-                case 'H':       // Heartbeat
-                    _Heartbeat.Clear();
-                    break;
-    
-                case 'F':       // File Request.
-                    bOK = ProcessFileRequest(nLength);
-                    break;
-    
-                case 'R':       // Chunk received.
-                    // We dont really care about this one, but must remove it from the queue if we get it.  Currently the client is not programmed to send this.
-                    bOK = ProcessChunkReceived(nLength);
-                    break;
+	switch(pData[0]) {
+		case 'I':       // INIT
+			if (nLength >= 3) {
+				ProcessInit(pData, nLength);
+				nProcessed = 3;
+			}
+			break;
 
-                default:
-                    // we got a char we werent expecting, so we want to close the connection.
-                    Close();
-                    bOK = false;
-                    break;
-            }
+		case 'H':       // Heartbeat
+			_Heartbeat.Clear();
+			nProcessed = 1;
+			break;
+
+		case 'F':       // File Request.
+			if (nLength >= 3) {
+				nTmp = ProcessFileRequest(pData, nLength);
+				ASSERT(nTmp >= 0);
+				if (nTmp > 0) {
+					nProcessed = 2 + nTmp;
+				}
+				ASSERT((nTmp == 0 && nProcessed == 0) || (nTmp > 0 && nProcessed > 2));
+			}
+			break;
+
+		case 'R':       // Chunk received.
+			// We dont really care about this one, but must remove it from the queue if we get it.  Currently the client is not programmed to send this.
+			if (nLength >= 3) {
+				ProcessChunkReceived(pData, nLength);
+				nProcessed = 3;
+			}
+			break;
+
+		default:
+			// we got a char we weren't expecting, so we want to close the connection.
+			Close();
+			break;
+	}
     
-        }
+    Unlock();
     
-        // process heartbeat if we are supposed to.
-        if (bOK != false) {
-            bOK = ProcessHeartbeat();
-        }
-    
-        // Send any data that is in our outbound queue.  Since we got this far, if the Process functions returned false, then we need to close the socket, we wont wait for the client to disconnect.
-        bOK = SendData();
-        if (bOK != false) {
-            Close();
-        }
-    }
-    
-    return(bOK);
+    return(nProcessed);
 }
 
 
@@ -157,6 +163,9 @@ bool Client::QueryData(char **query, int *nChunk)
     ASSERT(query != NULL);
     ASSERT(*query == NULL);
     ASSERT(nChunk != NULL);
+    
+    Lock();
+    
     ASSERT((_szQuery == NULL && _nChunk == 0) || (_szQuery != NULL && _nChunk >= 0));
     
     if (_szQuery != NULL) {
@@ -164,6 +173,8 @@ bool Client::QueryData(char **query, int *nChunk)
         *nChunk = _nChunk;
         bResult = true;
     }
+    
+    Unlock();
     
     return(bResult);
 }
@@ -180,6 +191,8 @@ void Client::QueryResult(int nChunk, char *pData, int nSize, int nLength)
     unsigned char pTmp[5];
     
     ASSERT(nChunk >= 0 && pData != NULL && nSize > 0 && nLength > 0);
+    
+    Lock();
     ASSERT(_nChunk == nChunk);
 
     // if the stored length is 0, then we store the new length and send a 'L' telegram to the client.
@@ -192,7 +205,7 @@ void Client::QueryResult(int nChunk, char *pData, int nSize, int nLength)
         pTmp[2] = (unsigned char) ((nLength >> 16) & 0xff);
         pTmp[1] = (unsigned char) ((nLength >> 24) & 0xff);
         pTmp[0] = 'L';
-        _DataOut.Add((char *)pTmp, 5);
+        Send((char *)pTmp, 5);
     }
     
     // send the chunk to the client.
@@ -201,11 +214,13 @@ void Client::QueryResult(int nChunk, char *pData, int nSize, int nLength)
     pTmp[2] = (unsigned char) (nChunk & 0xff);
     pTmp[1] = (unsigned char) ((nChunk >> 8) & 0xff);
     pTmp[0] = 'C';
-    _DataOut.Add((char *)pTmp, 5);
-    _DataOut.Add(pData, nSize);
+    Send((char *)pTmp, 5);
+    Send(pData, nSize);
 
     // increment the chunk counter.
     _nChunk++;
+    
+    Unlock();
 }
 
 
@@ -214,43 +229,28 @@ void Client::QueryResult(int nChunk, char *pData, int nSize, int nLength)
 // CJW: The client is initialising.  This should be the first message we get.  
 //      Therefore, we check that are internal values are all in their default
 //      settings, otherwise we close the connection.
-bool Client::ProcessInit(int nLength)
+void Client::ProcessInit(char *pData, int nLength)
 {   
-    bool bOK = true;
-    unsigned char *pData;
-
-    ASSERT(nLength >= 0);
+    ASSERT(pData != NULL && nLength >= 3);
+    ASSERT(pData[0] == 'I');
     
     if (_szQuery != NULL || _nChunk != 0 || _nLength != 0 || _nVersion != 0) {
-        _DataOut.Add("Q", 1);
-        bOK = false;
+        Send("Q", 1);
     }
     else {
     
-        // If we dont have enough data from the socket yet, then we need to put this character back in the queue to process again.  Heartbeat wont be incremented, so if we dont ever get enough, then we will eventually close the socket.
-        if (nLength < 2) {
-            _DataIn.Push("I", 1);
-        }
-        else {
-    
-            // we now need to get the two byte protocol version parameters.
-            pData = (unsigned char *) _DataIn.Pop(2);
-            ASSERT(pData != NULL);
-    
-            _nVersion = (pData[0] << 8) | pData[1];
-            printf("INIT - Version %d\n", _nVersion);
-    
-                            // right now we only know how to handle protocol version 1.
-            if (_nVersion != 1) {
-                _DataOut.Add("Q", 1);
-                bOK = false;
-            }
-            else {
-            }
-        }
-    }
-    
-    return(bOK);
+		_nVersion = (pData[1] << 8) | pData[2];
+		printf("INIT - Version %d\n", _nVersion);
+
+		// right now we only know how to handle protocol version 1.
+		if (_nVersion != 1) {
+			Send("Q", 1);
+		}
+		else {
+			// send a reply that indicates that the version is valid.
+			Send("V", 1);
+		}
+	}
 }
 
 
@@ -258,66 +258,43 @@ bool Client::ProcessInit(int nLength)
 // CJW: The client has requested a particular file.  We need to get that 
 //      information and store it so that the Server object can then ask us for
 //      it, so that it can be passed on the network of nodes.
-bool Client::ProcessFileRequest(int nLength)
+int Client::ProcessFileRequest(char *pData, int nLength)
 {   
-    bool bOK = true;
-    unsigned char *pData;
-    unsigned char nFileLength;
+    unsigned char nFileLength = 0;
 
-    ASSERT(nLength >= 0);
+    ASSERT(pData != NULL && nLength >= 0);
     
     // All the existing data needs to be in a particular state or the
     if (_szQuery != NULL || _nChunk != 0 || _nLength != 0 || _nVersion == 0) {
-        _DataOut.Add("Q", 1);
-        bOK = false;
+        Send("Q", 1);
     }
     else {
     
-        // If we dont have enough data from the socket yet, then we need to put this character back in the queue to process again.  Heartbeat wont be incremented, so if we dont ever get enough, then we will eventually close the socket.
-        if (nLength < 1) {
-            _DataIn.Push("F", 1);
-        }
-        else {
-    
-            // First we need to get the 1 byte length field.
-            pData = (unsigned char *) _DataIn.Pop(1);
-            ASSERT(pData != NULL);
-            nFileLength = (unsigned char) pData[0];
-            free(pData);
-    
-            if (nFileLength == 0) {
-                _DataOut.Add("Q", 1);
-                bOK = false;
-            }
-            else {
+		// First we need to get the 1 byte length field.
+		ASSERT(pData[0] == 'F');
+		nFileLength = (unsigned char) pData[1];
 
-                // If we dont have enough data yet, then put the data back that we already have, and then try again during the next loop.
-                if (nLength < nFileLength+1) {
-                    _DataIn.Push((char *) &nFileLength, 1);
-                    _DataIn.Push("F", 1);
-                }
-                else {
+		if (nFileLength == 0) {
+			Send("Q", 1);
+		}
+		else {
 
-                    pData = (unsigned char *) _DataIn.Pop(nFileLength);
-                    ASSERT(pData != NULL);
-    
-					ASSERT(_szQuery == NULL);
-                    _szQuery = (char *) malloc(nFileLength + 1);
-                    ASSERT(_szQuery);
-    
-                    strncpy(_szQuery, (const char *) pData, nFileLength);
-                    _szQuery[nFileLength] = '\0';
-    
-                    free(pData);
-    
-                    // Since we got some data, we need to use it as a heartbeat indicator also.
-                    _Heartbeat.Clear();
-                }
-            }
-        }
+			// If we dont have enough data yet, then put the data back that we already have, and then try again during the next loop.
+			if (nLength >= nFileLength+2) {
+				ASSERT(_szQuery == NULL);
+				_szQuery = (char *) malloc(nFileLength + 1);
+				ASSERT(_szQuery);
+
+				strncpy(_szQuery, (const char *) &pData[2], nFileLength);
+				_szQuery[nFileLength] = '\0';
+
+				// Since we got some data, we need to use it as a heartbeat indicator also.
+				_Heartbeat.Clear();
+			}
+		}
     }
     
-    return(bOK);
+    return((int)nFileLength);
 }
 
 
@@ -325,21 +302,12 @@ bool Client::ProcessFileRequest(int nLength)
 // CJW: Since we dont really care that the client received the chunk, we just 
 //      assume that it did, we will just remove this message from the data
 //      stream and then continue on.
-bool Client::ProcessChunkReceived(int nLength)
+void Client::ProcessChunkReceived(char *pData, int nLength)
 {
-    bool bOK = true;
-    char *pData;
+    ASSERT(pData != NULL && nLength >= 3);
     
-    ASSERT(nLength >= 0);
-    
-    if (nLength >= 2) {
-        pData = _DataIn.Pop(2);
-        ASSERT(pData);
-        free(pData);
-        _Heartbeat.Clear();
-    }
-    
-    return(bOK);
+    // we're not actually going to do anything with this information at this stage, but for possible optimisation of resources in the future, we are keeping it in the protocol.
+    _Heartbeat.Clear();
 }
 
 
@@ -365,7 +333,7 @@ bool Client::ProcessHeartbeat(void)
         }
     
         if (_Heartbeat.nWait > HEARTBEAT_WAIT) {
-            _DataOut.Push("Q", 1);
+            Send("Q", 1);
             bOK = false;
         }
         else {
@@ -373,17 +341,34 @@ bool Client::ProcessHeartbeat(void)
                 _Heartbeat.nDelay = 0;
                 _Heartbeat.nBeats ++;
                 if (_Heartbeat.nBeats >= HEARTBEAT_MISS) {
-                    _DataOut.Push("Q", 1);
+                    Send("Q", 1);
                     bOK = false;
                 }
                 else {
-                    _DataOut.Push("H", 1);
+                    Send("H", 1);
                 }
             }
         }
     }
 
     return(bOK);
+}
+
+
+
+//-----------------------------------------------------------------------------
+// CJW: The client has closed the connection.  We need to 
+void Client::OnClosed(void)
+{
+	// todo: not really much to do except log the activity.
+}
+
+
+void Client::OnStalled(char *pData, int nLength)
+{
+	ASSERT(pData != NULL && nLength > 0);
+	
+	// todo: not really much to do here because the client has closed the connection.  Just log the event and let the parent clean the object up on its next cycle.
 }
 
 

@@ -124,7 +124,7 @@ class Node : public BaseClient
     
         virtual void Accept(SOCKET nSocket);
     
-        bool Process(void);
+//         bool Process(void);
     
         Node * GetNext(void);
         void SetNext(Node *ptr);
@@ -155,21 +155,27 @@ class Node : public BaseClient
     
     protected:
     
+   		virtual int OnReceive(char *pData, int nLength);
+		virtual void OnIdle(void);
+		virtual void OnClosed(void);
+		virtual void OnStalled(char *pData, int nLength);
+    
+    
     private:
-        bool ProcessInit(int nLength);
-        bool ProcessValid(int nLength);
-        bool ProcessQuit(int nLength);
-        bool ProcessServer(int nLength);
-        bool ProcessPing(int nLength);
-        bool ProcessPingReply(int nLength);
-        bool ProcessFileRequest(int nLength);
-        bool ProcessFileGot(int nLength);
-        bool ProcessLocalFile(int nLength);
-        bool ProcessLocalOK(int nLength);
-        bool ProcessLocalFail(int nLength);
-        bool ProcessChunkRequest(int nLength);
-        bool ProcessChunkData(int nLength);
-        bool ProcessFileComplete(int nLength);
+        int ProcessInit(char *pData, int nLength);
+        int ProcessValid(char *pData, int nLength);
+        int ProcessQuit(char *pData, int nLength);
+        int ProcessServer(char *pData, int nLength);
+        void ProcessPing(void);
+        void ProcessPingReply(void);
+        int ProcessFileRequest(char *pData, int nLength);
+        int ProcessFileGot(char *pData, int nLength);
+        int ProcessLocalFile(char *pData, int nLength);
+        int ProcessLocalOK(char *pData, int nLength);
+        int ProcessLocalFail(char *pData, int nLength);
+        int ProcessChunkRequest(char *pData, int nLength);
+        int ProcessChunkData(char *pData, int nLength);
+        int ProcessFileComplete(char *pData, int nLength);
 
         void ProcessHeartbeat(void);
 

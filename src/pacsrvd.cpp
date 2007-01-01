@@ -30,7 +30,8 @@
 
 #include <unistd.h>
 #include <stdio.h>
-#include <DevPlus.h>
+
+#include <DpMain.h>
 
 #include "server.h"
 #include "config.h"
@@ -45,8 +46,8 @@
 // Check that the DevPlus version is at least what we started development with.  
 // It might be possible to compile on an older version, but cant think why you 
 // would want to.
-#if (VERSION_DEVPLUS < 137) 
-	#error DevPlus version must be 1.37 or higher.
+#if (DEVPLUS_VERSION < 225) 
+	#error DevPlus version must be 2.25 or higher.
 #endif
 
 class myApp : public DpMain 

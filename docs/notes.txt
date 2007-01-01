@@ -1,7 +1,7 @@
 pacsrv
 
 Threads 
-	For the sake of system activity, I've designed the system so that it is thread based, but does most of the work in two threads. One thread for maintaining the network of nodes (other daemons), and another thread to communicate with the local clients.
+	For the sake of system activity, I've designed the system so that it is thread based, but does most of the work in two threads. One thread for maintaining the network of nodes (other daemons), and another thread to communicate with the local clients.  Additionally a thread will be created to handle each connected socket but not very much processing will be done in those threads.  It will retrieve the data and store it ready for one of the processing threads to act on it.
 	
 	
 Sockets

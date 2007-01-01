@@ -33,7 +33,7 @@
 #define __LOGGER_H
 
 #include <stdio.h>
-#include <DevPlus.h>
+#include <DpLock.h>
 
 #define TODO(st)		printf("%s (%d): %s\n", __FILE__, __LINE__, st);
 

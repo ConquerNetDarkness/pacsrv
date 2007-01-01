@@ -199,7 +199,7 @@ int Network::GetConnectionCount(void)
 
     pTmp = _pNodes;
     while(pTmp != NULL) {
-        if (pTmp->IsConnected() == true) {
+        if (pTmp->IsClosed() == false) {
             nCount++;
         }
         pTmp = pTmp->GetNext();
@@ -399,12 +399,7 @@ void Network::ProcessNodes(void)
 
         pTmp = _pNodes;
         while (pTmp != NULL) {
-            if (pTmp->IsConnected() == true) {
-    
-                // Process the node.
-                if (pTmp->Process() == true) {
-                    bIdle = false;
-                }
+            if (pTmp->IsClosed() == false) {
     
                 // Has node received any chunks?  Save them all if so.
                 szFilename = NULL;
@@ -573,7 +568,7 @@ void Network::RemoveClosedNodes(void)
     pPrev = NULL;
     pTmp = _pNodes;
     while (pTmp != NULL) {
-        if (pTmp->IsConnected() == false) {
+        if (pTmp->IsClosed() == true) {
             if (pPrev == NULL) {
                 _pNodes = pTmp->GetNext();
     
@@ -637,7 +632,7 @@ bool Network::RunQuery(char *szQuery, int nChunk, char **pData, int *nSize, int 
     
         pNode = _pNodes;
         while(pNode != NULL) {
-            if (pNode->IsConnected() == true) {
+            if (pNode->IsClosed() == false) {
                 pNode->RequestFileFromNetwork(szQuery);
             }
             pNode = pNode->GetNext();
@@ -742,8 +737,6 @@ void Network::ProcessFinal(Node *pNode)
 	while (bDone == false) {
 		bDone = true;
 	
-		pNode->Process();
-		
 		szFilename = NULL;
 		if (pNode->GetChunks(&szFilename, &pData, &nChunk, &nSize) == true) {
 			SaveChunk(szFilename, pData, nChunk, nSize);
@@ -877,7 +870,7 @@ void Network::RelayFileRequest(strFileRequest *pReq)
 	// Then we go thru the nodes and tell each one to send the message.
 	pNode = _pNodes;
 	while(pNode != NULL) {
-		if (pNode->IsConnected() == true) {
+		if (pNode->IsClosed() == false) {
 			
 			// check that it is not from a node that has already got this message
 			pAddr = pNode->GetServerInfo();
@@ -942,7 +935,7 @@ void Network::RelayFileReply(strFileReply *pReply)
 	// Go thru the nodes and find the one we need to send the message to.
 	pNode = _pNodes;
 	while(pNode != NULL) {
-		if (pNode->IsConnected() == true) {
+		if (pNode->IsClosed() == false) {
 			pAddr = pNode->GetServerInfo();
 			if (pAddr != NULL) {
 				if (pAddr->IsSame(pNextAddress) == true) {
