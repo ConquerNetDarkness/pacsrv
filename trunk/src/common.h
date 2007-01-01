@@ -42,6 +42,10 @@
 #define HEARTBEAT_DELAY     5
 #define HEARTBEAT_MISS      3
 
+#ifndef INI_FILE
+#define INI_FILE "/etc/pacsrv.conf"
+#endif
+
 
 struct strHeartbeat 
 {

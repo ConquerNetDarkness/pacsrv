@@ -84,6 +84,7 @@ class FileInfo
 		
 		void SetFile(char *szFilename);
 		void SetLocal(void);
+		void SetLength(int nLength);
 		
 		char *GetFilename(void);
 		bool IsLocal(void);

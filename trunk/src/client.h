@@ -49,24 +49,29 @@ class Client : public BaseClient
         Client();
         virtual ~Client();
     
-        bool Process(bool bCheck=false);
+//         bool Process(bool bCheck=false);
         bool QueryData(char **szQuery, int *nChunk);
         void QueryResult(int nChunk, char *pData, int nSize, int nLength);
     
     protected:
     
+   		virtual int OnReceive(char *pData, int nLength);
+		virtual void OnIdle(void);
+		virtual void OnClosed(void);
+		virtual void OnStalled(char *pData, int nLength);
+
+    
     private:
-        bool ProcessInit(int nLength);
+        void ProcessInit(char *pData, int nLength);
         bool ProcessHeartbeat(void);
-        bool ProcessChunkReceived(int nLength);
-        bool ProcessFileRequest(int nLength);
+        void ProcessChunkReceived(char *pData, int nLength);
+        int ProcessFileRequest(char *pData, int nLength);
     
         char *_szQuery;
         int   _nChunk;
         int   _nLength;
     
         struct strHeartbeat _Heartbeat;
-        DpDataQueue _DataIn, _DataOut;
         unsigned _nVersion;        // protocol version.
 };
 

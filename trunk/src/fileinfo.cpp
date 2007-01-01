@@ -413,3 +413,27 @@ bool FileInfo::IsLocal(void)
 void FileInfo::FileStart(void)
 {
 }
+
+
+
+void FileInfo::SetFile(char *szFilename)
+{
+	ASSERT(szFilename != NULL);
+	ASSERT(_szFilename == NULL);
+	
+}
+
+
+
+void FileInfo::SetLength(int nLength)
+{
+	ASSERT(nLength > 0);
+	ASSERT(_szFilename != NULL);
+	ASSERT(_nFileLength == 0);
+	_nFileLength = nLength;
+}
+
+
+
+
+

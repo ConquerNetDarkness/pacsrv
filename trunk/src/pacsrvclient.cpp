@@ -66,7 +66,9 @@
 #include <string.h>
 #include <stdlib.h>
 
-#include <DevPlus.h>
+#include <DpMain.h>
+#include <DpSocketEx.h>
+#include <DpIniFile.h>
 
 #include "common.h"
 
@@ -81,8 +83,17 @@
 #define WIDTH_FILENAME		31
 #define WIDTH_BAR			20
 
+// Sleep this amount during the main loop between the stats display.  This is 
+// broken up into chunks so that we can stop sooner if the file is completed.  
+// For example, if we set this to a single 1 second sleep, if the file 
+// finished after 100 miliseconds, we have to wait for the rest of the second 
+// before exiting.   Makes the code a touch more complicated to look at for 
+// beginers, but it improves the apparent efficiency of the application.
+#define LOOP_SLEEP	100
+#define LOOP_LOOPS	10	
 
-class Client 
+
+class Client : public DpSocketEx
 {
 	public:
 	protected:
@@ -110,9 +121,8 @@ class Client
 			bool bStop;			// true if we should stop looping.
 			bool bInit;			// true if INIT has been sent.
 			bool bRequest;		// true if FILE REQUEST has been sent.
-			bool bIdle;			// true if the connection is idle.   will sleep for 1 second.
 			bool bFileLength;	// true if we have received file length info.
-			bool bDisplay;		// true if we are forcing the display to be updated.
+			bool bComplete;		// true if the file is completed.
 		} m_Status;
 		
 		struct {
@@ -125,9 +135,6 @@ class Client
 			} chunk, temp;
 		} m_File;
 
-		DpDataQueue m_qIn, m_qOut;
-
-		
 		
 		
 	public:
@@ -151,7 +158,6 @@ class Client
 			m_Status.bRequest    = false;
 			m_Status.bStop       = false;
 			m_Status.bFileLength = false;
-			m_Status.bDisplay    = false;
 			
 			m_File.szFilename = NULL;
 			m_File.fp = NULL;
@@ -249,7 +255,6 @@ class Client
 			int nPercent;
 			int i, j;
 			int nRate, nRateLo;
-			int nMin, nSec;
 			time_t nTime;
 			int nSeconds;
 			
@@ -317,8 +322,6 @@ class Client
 			
 			printf("\r%*s %3d%c |%s| %3d%% %4d.%1dkb/s ", WIDTH_FILENAME, m_Display.szFileDisplay, m_Display.nFileSize, m_Display.cSizeInd, szBar, nPercent, nRate, nRateLo );
 			fflush(stdout);
-			
-			m_Status.bDisplay = false;
 		}
 
 		//---------------------------------------------------------------------
@@ -340,6 +343,79 @@ class Client
 			
 			return(bGotIt);
 		}
+		
+		
+		//---------------------------------------------------------------------
+		// CJW: Download the file from the network.  We need to connect to the 
+		// 		daemon, and request the file.  If we cannot connect to the 
+		// 		daemon, or if the file is not on the network, then we will 
+		// 		return a false.
+		bool DownloadNetwork(void)
+		{
+			bool bGotIt = false;
+			int nLoops;
+			
+			ASSERT(m_szServer != NULL);
+			ASSERT(m_nPort > 0);
+			ASSERT(m_szFile != NULL);
+			
+			// Prepare the filename, removing the ".part" bit.
+			if (PrepareFilename() == true) {
+			
+				// connect to the local server daemon.
+				if (Connect(m_szServer, m_nPort) == false) {
+					fprintf(stderr, "pacsrvclient: ** Unable to connect to server %s:%d\n\n", m_szServer, m_nPort);
+				}
+				else {
+				
+					// we're connected, the receiver thread should be looping 
+					// now (or soon will), and we will get an OnReceive when 
+					// some data arrives.   While we are processing the 
+					// connection, this loop needs to continue 
+				
+					
+					Lock();
+					m_Heartbeat.nLastCheck = time(NULL);
+					m_Stats.nStart = m_Heartbeat.nLastCheck;
+					Unlock();
+					
+					
+					// Before we start our loop, we need to send an Init.
+					SendInit();
+					
+					// Now we loop, displaying the status every second.
+					nLoops = 0;
+					Lock();
+					while(m_Status.bStop == false) {
+						if (nLoops >= LOOP_LOOPS) { 
+							DisplayStatus(); 
+							nLoops = 0; 
+						}
+						Unlock();
+						Sleep(LOOP_SLEEP);
+						nLoops ++;
+						Lock();
+					}
+					Unlock();
+				}			
+				
+			}
+			
+			Lock();
+			if (m_File.fp != NULL) {
+				fclose(m_File.fp);
+				m_File.fp = NULL;
+			}
+			
+			if (m_Status.bComplete == true) {
+				bGotIt = true;
+			}
+			Unlock();
+			
+			return(bGotIt);
+		}
+		
+		
 		
 		//---------------------------------------------------------------------
 		// CJW: We need to prepare the filename.  The one passed to us, 
@@ -368,58 +444,85 @@ class Client
 			return(bValid);
 		}
 		
-		//---------------------------------------------------------------------
-		// CJW: Get any data that is ready in the socket, and put it in our 
-		// 		'IN' queue.
-		void ReadData(DpSocket *pSocket) 
-		{
-			char *pData;
-			int nLength;
-			
-			ASSERT(pSocket != NULL);
-			
-			pData = (char *) malloc(PACKET_SIZE);
-			ASSERT(pData != NULL);
-			nLength = pSocket->Receive(pData, PACKET_SIZE);
-			if (nLength < 0) {
-				// socket was closed.  
-				m_Status.bStop = true;
-			}
-			else if (nLength > 0) {
-				m_qIn.Add(pData, nLength);
-				m_Status.bIdle = false;
-			}
-			free(pData);
-		}
 		
 		//---------------------------------------------------------------------
-		// CJW: Send any data that is waiting in our 'OUT' queue..
-		void SendData(DpSocket *pSocket)
+		// CJW: When nothing is received on the socket, this function will be 
+		// 		called.  We will use this to process the heartbeat.
+		void OnIdle(void)
 		{
-			int nLength, nSent;
-			char *pData;
+			ProcessHeartbeat();
+			DpSocketEx::OnIdle();
+		}
+		
+		
+		//---------------------------------------------------------------------
+		// CJW: The peer has closed the socket.  We will set the status to 
+		// 		indicate that we should stop.		
+		void OnClosed()
+		{
+			Lock();
+			m_Status.bStop = true;
+			Unlock();
+		}
+		
+		
+		//---------------------------------------------------------------------
+		// CJW: this function is called every time we have some data to process.		
+		int OnReceive(char *pData, int nLength)
+		{
+			int nDone = 0;
+			int nTmp;
 			
-			ASSERT(pSocket != NULL);
-													
-			nLength = m_qOut.Length();
-			if (nLength > 0) {
-				if (nLength > PACKET_SIZE) { nLength = PACKET_SIZE; }
-				pData = m_qOut.Pop(nLength);
-				ASSERT(pData != NULL);
-								
-				nSent = pSocket->Send(pData, nLength);
-				if (nSent < 0) {
+			ASSERT(pData != NULL && nLength > 0);
+			
+			Lock();
+			
+			ASSERT(m_Status.bInit == true);
+			
+			// Now we need to actually check the contents of our received data. 
+			switch(pData[0]) {
+				case 'V':
+					SendFileRequest();
+					nDone = 1;
+					break;
+				
+				case 'H':
+					m_Heartbeat.nBeats = 0;
+					nDone = 1;
+					break;
+									
+				case 'L':
+					if (nLength >= 5) {
+						ProcessFileLength(pData, nLength);
+						nDone = 5;
+					}
+					break;
+									
+				case 'C':
+					if (nLength > 5) {
+						nTmp = ProcessChunk(pData, nLength);
+						if (nTmp > 0) {
+							nDone = 5 + nTmp;
+						}
+						ASSERT((nTmp == 0 && nDone == 0) || (nTmp > 0 && nDone > 5))
+					}
+					break;
+									
+				case 'Q':
+				case 'X':
+				default:
 					m_Status.bStop = true;
-				}
-				else if (nSent < nLength) {
-					m_qOut.Push(&pData[nSent], nLength-nSent);
-				}
-				else {
-					m_Status.bIdle = false;
-				}
-								
-				free(pData);
+					nDone = 1;
+					break;										
 			}
+			
+			if (nDone > 0) {
+				m_Heartbeat.nBeats = 0;
+			}
+			
+			Unlock();
+			
+			return(nDone);
 		}
 		
 		
@@ -428,8 +531,10 @@ class Client
 		// 		then change the status to indicate that we've sent it.
 		void SendInit(void)
 		{
-			m_qOut.Add("I\000\000", 3);
+			Send("I\000\000", 3);
+			Lock();
 			m_Status.bInit = true;
+			Unlock();
 		}
 		
 		
@@ -442,17 +547,20 @@ class Client
 			int nLength;
 			unsigned char ch;
 			
+			Lock();
 			ASSERT(m_File.szFilename != NULL);
 			nLength = strlen(m_File.szFilename);
 			ASSERT(nLength < 256);
 			
 			ch = (unsigned char) nLength;
 			
-			m_qOut.Add("F", 1);
-			m_qOut.Add((char *) &ch, 1);
-			m_qOut.Add(m_File.szFilename, nLength);
+			// *** to improve performance a little bit, we should put all this data into a buffer and then send once.
+			Send("F", 1);
+			Send((char *) &ch, 1);
+			Send(m_File.szFilename, nLength);
 			
 			m_Status.bRequest = true;
+			Unlock();
 		}
 		
 		//---------------------------------------------------------------------
@@ -471,6 +579,7 @@ class Client
 		{	
 			time_t nTime;
 			
+			Lock();
 			nTime = time(NULL);
 			if (nTime > m_Heartbeat.nLastCheck) {
 				m_Heartbeat.nDelay ++;
@@ -490,14 +599,14 @@ class Client
 							m_Status.bStop = true;
 						}
 						else {
-							m_qOut.Add("H", 1);
+							Send("H", 1);
 						}
 					}
 				}
 								
 				m_Heartbeat.nLastCheck = nTime;
-				m_Status.bDisplay = true;
 			}
+			Unlock();
 		}
 		
 		//---------------------------------------------------------------------
@@ -510,10 +619,11 @@ class Client
 		// 		information.  Because if we've already received it, and we 
 		// 		receive it again, its an indication of a corrupted stream and 
 		// 		we must stop.
-		void ProcessFileLength(void)
+		void ProcessFileLength(char *pData, int nLength)
 		{
-			int nLength;
-			char *pData;
+			
+			ASSERT(pData != NULL && nLength > 0);
+			ASSERT(nLength >= 5 && pData[0] == 'L');
 			
 			ASSERT(m_File.nSize == 0);
 			ASSERT(m_File.fp == NULL);
@@ -522,28 +632,18 @@ class Client
 				m_Status.bStop = true;
 			}
 			else {
-				nLength = m_qIn.Length();
-				if (nLength >= 4) {
-					pData = m_qIn.Pop(4);
-					ASSERT(pData != NULL);	
-					m_Status.bFileLength = true;
-					
-					m_File.nSize = 0;
-					m_File.nSize += ((unsigned char) pData[0]) << 24;
-					m_File.nSize += ((unsigned char) pData[1]) << 16;
-					m_File.nSize += ((unsigned char) pData[2]) << 8;
-					m_File.nSize +=  (unsigned char) pData[3];
-					free(pData);
+				m_Status.bFileLength = true;
+				
+				m_File.nSize = 0;
+				m_File.nSize += ((unsigned char) pData[1]) << 24;
+				m_File.nSize += ((unsigned char) pData[2]) << 16;
+				m_File.nSize += ((unsigned char) pData[3]) << 8;
+				m_File.nSize +=  (unsigned char) pData[4];
 														
-					// we are opening the filename that was passed as an argument to this application. (the one with .part)
-					m_File.fp = fopen(m_szFile, "w");		
-					if (m_File.fp == NULL) {
-						m_Status.bStop = true;
-					}
-				}
-				else {
-					// Not enough data there yet, so push this one back.
-					m_qIn.Push("L", 1);
+				// we are opening the filename that was passed as an argument to this application. (the one with .part)
+				m_File.fp = fopen(m_szFile, "w");		
+				if (m_File.fp == NULL) {
+					m_Status.bStop = true;
 				}
 			}
 		}
@@ -555,186 +655,48 @@ class Client
 		// 		also that all of it has arrived.  Once the entire chunk is in 
 		// 		the queue, we will pull it out, write it to the file, and 
 		// 		update our display.
-		void ProcessChunk(void)
+		//
+		//		We will return a 0, if there is not enough data, otherwise we 
+		//		will return the length of the chunk.
+		int ProcessChunk(char *pData, int nLength)
 		{
-			int nLength;
-			char *pData;
-			
-			nLength = m_qIn.Length();
-			if (nLength >= 4) {
-				pData = m_qIn.Pop(4);
-				ASSERT(pData != NULL);
+			m_File.temp.nSize = 0;
 
-				m_File.temp.nCount = ((unsigned char) pData[0]) << 8;
-				m_File.temp.nCount += (unsigned char) pData[1];
+			m_File.temp.nCount = ((unsigned char) pData[1]) << 8;
+			m_File.temp.nCount += (unsigned char) pData[2];
+												
+			if (m_File.temp.nCount != m_File.chunk.nCount) {
+				m_Status.bStop = true;
+			}
+			else {
+				m_File.chunk.nCount = m_File.temp.nCount;
+
+				m_File.temp.nSize = ((unsigned char) pData[3]) << 8;
+				m_File.temp.nSize += (unsigned char) pData[4];
 													
-				if (m_File.temp.nCount != m_File.chunk.nCount) {
+				if (m_File.temp.nSize <= 0) {
 					m_Status.bStop = true;
 				}
 				else {
-					m_File.chunk.nCount = m_File.temp.nCount;
-
-					m_File.temp.nSize = ((unsigned char) pData[2]) << 8;
-					m_File.temp.nSize += (unsigned char) pData[3];
-														
-					if (m_File.temp.nSize <= 0) {
-						m_Status.bStop = true;
+					if ((nLength-1) >= (m_File.temp.nSize + 4)) {
+						ASSERT(m_File.fp != NULL);
+						
+						m_Stats.nDone += m_File.temp.nSize;
+						fwrite(&pData[5], m_File.temp.nSize, 1, m_File.fp);
 					}
 					else {
-						if (nLength >= (m_File.temp.nSize + 4)) {
-							free(pData);
-							pData = m_qIn.Pop(m_File.temp.nSize);
-							ASSERT(pData);
-							ASSERT(m_File.fp != NULL);
-							
-							m_Stats.nDone += m_File.temp.nSize;
-							fwrite(pData, m_File.temp.nSize, 1, m_File.fp);
-							
-							m_Heartbeat.nBeats = 0;
-						}
-						else {
-							m_qIn.Push(pData, 4);
-							m_qIn.Push("C", 1);
-						}
+						m_File.temp.nSize = 0;
 					}
 				}
-													
-				free(pData);
 			}
-		}
-		
-		
-		//---------------------------------------------------------------------
-		// CJW: Process the data that we have received from the daemon.  Since 
-		//		there are a couple of steps we have to go thru before we 
-		//		actually start getting any of the file contents, we have to 
-		//		check a few status values first and make sure we get the right 
-		//		responce from the daemon.
-		void ProcessData(void)
-		{
-			char *pData;
-			int nLength;
-			char cCommand;
 			
-			if (m_Status.bInit == false) {
-				// We havent sent the init command yet, so send it now.
-				ASSERT(m_Status.bRequest == false);
-				SendInit();
-			}
-			else if (m_Status.bRequest == false) {
-				// We've sent the init, but havent sent the file request yet.   Do that now.
-				SendFileRequest();
-			}
-			else {
-				ProcessHeartbeat();
-								
-				// Now we need to actually check the contents of our incoming queue. 
-				if (m_Status.bStop == false) {
-					nLength = m_qIn.Length();
-					if (nLength > 0) {
-						pData = m_qIn.Pop(1);
-						ASSERT(pData);
-						cCommand = pData[0];
-						free(pData);
-										
-						switch(cCommand) {
-							case 'V':
-							case 'H':
-								m_Heartbeat.nBeats = 0;
-								break;
-												
-							case 'L':
-								ProcessFileLength();
-								break;
-												
-							case 'C':
-								ProcessChunk();
-								break;
-												
-							case 'Q':
-							case 'X':
-							default:
-								m_Status.bStop = true;
-								break;										
-						}
-					}
-				}
-			}
+			ASSERT(m_File.temp.nSize >= 0);
+			return(m_File.temp.nSize);
 		}
 		
 		
 		
 		
-		//---------------------------------------------------------------------
-		// CJW: Download the file from the network.  We need to connect to the 
-		// 		daemon, and request the file.  If we cannot connect to the 
-		// 		daemon, or if the file is not on the network, then we will 
-		// 		return a false.
-		bool DownloadNetwork(void)
-		{
-			bool bGotIt = false;
-			DpSocket *pSocket;
-			
-			ASSERT(m_szServer != NULL);
-			ASSERT(m_nPort > 0);
-			ASSERT(m_szFile != NULL);
-			
-			// Prepare the filename, removing the ".part" bit.
-			if (PrepareFilename() == true) {
-			
-				// connect to the local server daemon.
-				pSocket = new DpSocket;
-				if (pSocket != NULL) {
-				
-					if (pSocket->Connect(m_szServer, m_nPort) == false) {
-						printf("pacsrvclient: ** Unable to connect to server %s:%d\n\n", m_szServer, m_nPort);
-					}
-					else {
-						
-						// Get the current time.
-						m_Heartbeat.nLastCheck = time(NULL);
-						m_Stats.nStart = m_Heartbeat.nLastCheck;
-						
-						// Because we are setting the idle setting when any activity occurs, some states in this while loop expect that we will loop agian straight away.  If we sleep for 1 second between these particular loops, then the file transfer will take too long.  For example, we send the init command, and then immediately send the File request, then we should expect to wait for the data to start arriving (checking heartbeats while we do).  the IDLE status is to indicate if the socket activity was idle.  
-						while(m_Status.bStop == false) {
-							m_Status.bIdle = true;
-							
-							ReadData(pSocket);
-							ProcessData();
-							SendData(pSocket);
-							
-							ASSERT(m_Stats.nDone <= m_File.nSize);
-							if (m_Stats.nDone == m_File.nSize) {
-								bGotIt = true;
-								m_Status.bStop = true;
-								m_Status.bIdle = false;
-								m_Status.bDisplay = true;
-							}
-							
-							if (m_Status.bIdle == true) {
-								m_Status.bDisplay = true;
-							}
-								
-							if (m_Status.bDisplay == true) {
-								DisplayStatus();
-							}
-							
-							if (m_Status.bIdle == true) {
-								sleep(1);
-							}
-						}
-					}			
-				
-					delete pSocket;;
-				}
-			}
-			
-			if (m_File.fp != NULL) {
-				fclose(m_File.fp);
-			}
-			
-			return(bGotIt);
-		}
 		
 		
 		//---------------------------------------------------------------------

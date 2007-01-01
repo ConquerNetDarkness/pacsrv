@@ -31,21 +31,19 @@
 #ifndef __BASECLIENT_H
 #define __BASECLIENT_H
 
-#include <DevPlus.h>
+#include <DpSocketEx.h>
 
 
-class BaseClient : public DpSocket
+class BaseClient : public DpSocketEx
 {
     public:
         BaseClient();
         virtual ~BaseClient();
-    
+        
     protected:
-		DpDataQueue _DataIn, _DataOut;
     
-        bool ReadData(void);
-        char GetCommand(void);
-        bool SendData(void);
+		virtual int OnReceive(char *pData, int nLength) = 0;
+
 
 	private:
 		

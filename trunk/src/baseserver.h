@@ -34,7 +34,7 @@
 #ifndef __BASESERVER_H
 #define __BASESERVER_H
 
-#include <DevPlus.h>
+#include <DpServerInterface.h>
 
 class BaseServer : public DpServerInterface
 {

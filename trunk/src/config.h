@@ -35,7 +35,8 @@
 #ifndef __CONFIG_H
 #define __CONFIG_H
 
-#include <DevPlus.h>
+#include <DpIniFile.h>
+#include <DpLock.h>
 
 #define MAX_SERVER_LEN			15
 

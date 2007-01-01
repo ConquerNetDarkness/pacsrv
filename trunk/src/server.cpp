@@ -186,17 +186,12 @@ void Server::ProcessClients(void)
 		// Check each client to see if there is any query we are waiting on.
 		for (i=0; i<_Client.nCount; i++) {
 			if (_Client.pList[i] != NULL) {
-				if (_Client.pList[i]->IsConnected() == false) {
+				if (_Client.pList[i]->IsClosed() == true) {
 					// The client is no longer connected, so we should remove it from the list.
 					delete _Client.pList[i];
 					_Client.pList[i] = NULL;
 				}
 				else {
-					
-					// Let the client read data from the socket.  If we pass 
-					// in a true parameter, then we want the client to 
-					// validate the heartbeat check.
-					_Client.pList[i]->Process(bCheck);
 					
 					szQuery = NULL;
 					if (_Client.pList[i]->QueryData(&szQuery, &nChunk) == true) {

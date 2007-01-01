@@ -45,8 +45,6 @@
 #ifndef __SERVER_H
 #define __SERVER_H
 
-#include <DevPlus.h>
-
 #include "baseserver.h"
 #include "client.h"
 #include "network.h"
