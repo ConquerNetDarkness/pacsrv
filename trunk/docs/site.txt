@@ -21,3 +21,27 @@ network.txt file, and then renames the network-next.txt file after first
 removing any duplicate entries.  
 
 5.  That is all.
+
+
+
+
+------------------------------
+For ease of use, the IP/port details will be stored in a MySQL table.  it will be of the following schema.
+
+CREATE TABLE Locations (
+  LocID   INT UNSIGNED UNIQUE AUTO_INCREMENT NOT NULL,
+  IP      INT UNSIGNED,
+  Port    INT,
+  Created DATETIME,
+  Status  TINYINT DEFAULT 0,
+  PRIMARY KEY(LocID)
+);
+
+When a query is made, the details are added to the table, if that IP is not already in the table.  It will return the oldest 3 records, and remove the very oldest (as long as we have more than 3 records in the table).  This should all be done in a LOCK TABLE setting to keep it consistant.
+
+Even though we are returning 3 addresses, we will be adding one for every one that is being removed, so we should maintain a very small list, with each address being given out 3 times.   
+
+Every hour, we could do a cron job that checks this table to see 
+
+
+
