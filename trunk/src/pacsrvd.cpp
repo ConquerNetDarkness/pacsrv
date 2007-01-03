@@ -98,7 +98,7 @@ class myApp : public DpMain
 		// 		the application is told to stop by some external interface.  If 
 		// 		you dont want the application to continue running, you must 
 		// 		call the Shutdown() function.
-		virtual void OnStartup(int argc, char **argv)
+		virtual void OnStartup(void)
 		{
 			printf("pacsrvd started.\n");
 			

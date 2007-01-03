@@ -434,6 +434,15 @@ void FileInfo::SetLength(int nLength)
 }
 
 
+// Need to make everything thread-friendly, because we will be accessing these objects from multiple threads I think.  At least make sure that only one thread will be accessing it.
+int FileInfo::GetUseCount(void)
+{
+	return(_nUseCount);
+}
 
 
+void FileInfo::SetLocal(void)
+{	
+	_bLocal = true;
+}
 

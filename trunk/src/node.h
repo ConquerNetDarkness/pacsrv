@@ -156,9 +156,9 @@ class Node : public BaseClient
     protected:
     
    		virtual int OnReceive(char *pData, int nLength);
-		virtual void OnIdle(void);
-		virtual void OnClosed(void);
-		virtual void OnStalled(char *pData, int nLength);
+// 		virtual void OnIdle(void);
+// 		virtual void OnClosed(void);
+// 		virtual void OnStalled(char *pData, int nLength);
     
     
     private:
