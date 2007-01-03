@@ -968,3 +968,140 @@ int Node::ProcessLocalOK(char *pData, int nLength)
 	return(nProcessed);
 }
 
+
+//-----------------------------------------------------------------------------
+// CJW:	The remote node has replied that it doesnt have the file that we are 
+// 		attempting to download.  We need to make a note of it so that the 
+// 		controlling object can then ask for the next file in our list.
+//     -->  L<flen><file*flen>
+//     <--  A<flen><length*4><file*flen>
+//     <--  N<flen><file*flen>
+int Node::ProcessLocalFail(char *pData, int nLength)
+{
+	int nProcessed = 0;
+	char szFilename[256];
+	int len;
+	unsigned char *pTmp;
+	
+	ASSERT(pData != NULL && nLength > 0);
+	ASSERT(pData[0] == 'N');
+	ASSERT(_Data.szFilename != NULL);
+	
+	if (nLength > 3) {
+		pTmp = (unsigned char *) &pData[1];
+		len = pTmp[0];
+		ASSERT(len > 0);
+	
+		if (nLength >= 2+len) {
+			nProcessed = 2+len;
+	
+			ASSERT(len > 0 && len < 256);
+			strncpy(szFilename, &pData[2], len);
+			szFilename[len] = '\0';
+			
+			// free the filename so that we know that we are not currently processing the file.
+			ASSERT(strcmp(szFilename, _Data.szFilename) == 0);
+			free(_Data.szFilename);
+			_Data.szFilename = NULL;
+		}
+	}
+	
+	ASSERT(nProcessed == 0 || nProcessed > 2);
+	return(nProcessed);
+}
+
+
+
+
+//-----------------------------------------------------------------------------
+// CJW:	The node is requesting a particular chunk.  For this to be valid, the 
+// 		'L' telegram must already have been received and accepted.
+//     -->  C<chunk*2>
+//     <--  D<chunk*2><len*2><data*len>
+int Node::ProcessChunkRequest(char *pData, int nLength)
+{
+	int nProcessed = 0;
+	int nChunk;
+
+	ASSERT(pData != NULL && nLength > 0);
+	ASSERT(pData[0] == 'C');
+	
+	if (nLength >= 3 && _Data.nChunk == 0) {
+		nChunk = 0;
+		nChunk += ((unsigned char) pData[1]) << 8;
+		nChunk +=  (unsigned char) pData[2];
+		
+		_Data.nChunk = nChunk;
+		ASSERT(_Data.nSize == 0);
+		ASSERT(_Data.szFilename != NULL);
+		
+		nProcessed = 3;
+	}
+	
+	ASSERT(nProcessed == 0 || nProcessed == 3);
+	return(nProcessed);
+}
+
+
+
+
+//-----------------------------------------------------------------------------
+// CJW:	The node is returning a chunk of data that we requested.  
+//     -->  C<chunk*2>
+//     <--  D<chunk*2><len*2><data*len>
+int Node::ProcessChunkData(char *pData, int nLength)
+{
+	int nProcessed = 0;
+	int nChunk, nLen;
+
+	ASSERT(pData != NULL && nLength > 0);
+	ASSERT(pData[0] == 'D');
+	
+	if (nLength >= 6 && _Data.nChunk > 0) {
+		nChunk = 0;
+		nChunk += ((unsigned char) pData[1]) << 8;
+		nChunk +=  (unsigned char) pData[2];
+		ASSERT(nChunk > 0);
+		
+		nLen = 0;
+		nLen += ((unsigned char) pData[3]) << 8;
+		nLen +=  (unsigned char) pData[4];
+		ASSERT(nLen > 0);
+		
+		ASSERT(_Data.szFilename != NULL);
+		ASSERT(_Data.pData == NULL);
+		ASSERT(nChunk == _Data.nChunk);
+		_Data.pData = (char *) malloc(nLen);
+		_Data.nSize = nLen;
+		
+		nProcessed = 5 + nLen;
+	}
+	
+	ASSERT(nProcessed == 0 || nProcessed > 5);
+	return(nProcessed);
+}
+
+
+//-----------------------------------------------------------------------------
+// CJW:	The node is indicating that the file is complete.
+//     -->  K
+int Node::ProcessFileComplete(char *pData, int nLength)
+{
+	ASSERT(pData != NULL && nLength > 0);
+	ASSERT(pData[0] == 'K');
+	
+	ASSERT(_Data.szFilename != NULL);
+	free(_Data.szFilename);
+	_Data.szFilename = NULL;
+	
+	if (_Data.pData != NULL) {
+		free(_Data.pData);
+		_Data.pData = NULL;
+		_Data.nChunk = 0;
+		_Data.nSize = 0;
+	}
+	
+	return(1);
+}
+
+
