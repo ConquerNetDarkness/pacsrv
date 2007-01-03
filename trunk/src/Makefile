@@ -88,4 +88,7 @@ pacsrvclient: pacsrvclient.cpp $(H_common)
 clean: 
 	@-rm $(D_OBJS) 2>/dev/null
 	@-rm pacsrvd-log*
+	@-rm pacsrvclient
+	@-rm pacsrvd
+
 
