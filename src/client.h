@@ -73,6 +73,8 @@ class Client : public BaseClient
     
         struct strHeartbeat _Heartbeat;
         unsigned _nVersion;        // protocol version.
+        int _nClientID;
+        static int _nNextClientID;
 };
 
 

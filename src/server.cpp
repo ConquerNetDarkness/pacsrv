@@ -172,6 +172,7 @@ void Server::ProcessClients(void)
 	int nChunk, nSize, nLength;
 	char *pData;
 	bool bIdle, bCheck;
+	Logger log;
 	
 	Lock();
 	
@@ -188,6 +189,7 @@ void Server::ProcessClients(void)
 			if (_Client.pList[i] != NULL) {
 				if (_Client.pList[i]->IsClosed() == true) {
 					// The client is no longer connected, so we should remove it from the list.
+					log.System("Deleting client that has been closed");
 					delete _Client.pList[i];
 					_Client.pList[i] = NULL;
 				}

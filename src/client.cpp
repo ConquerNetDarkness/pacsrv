@@ -45,6 +45,9 @@
 #define HEARTBEAT_WAIT      5
 
 
+
+int Client::_nNextClientID = 1;
+
 //-----------------------------------------------------------------------------
 // CJW: Constructor.  Initialise the values, and our state.  Since we havent 
 //      actually received any data from the client, we have an UNKNOWN state.
@@ -55,6 +58,8 @@ Client::Client()
     _nChunk   = 0;
     _nLength  = 0;
     _nVersion = 0;
+    _nClientID = _nNextClientID++;
+    if (_nNextClientID > 999999) _nNextClientID = 1;
     Unlock();
 }
 
@@ -72,6 +77,11 @@ Client::~Client()
 }
 
 
+//-----------------------------------------------------------------------------
+// CJW: When the client is idle (which should happen quite a lot), we will 
+// 		update our heartbeat information.  If the heartbeat fails, then we will 
+// 		close the client connection and it will get deleted by the server 
+// 		object.
 void Client::OnIdle(void)
 {
 	if (ProcessHeartbeat() == false) {
@@ -306,7 +316,9 @@ void Client::ProcessChunkReceived(char *pData, int nLength)
 {
     ASSERT(pData != NULL && nLength >= 3);
     
-    // we're not actually going to do anything with this information at this stage, but for possible optimisation of resources in the future, we are keeping it in the protocol.
+    // we're not actually going to do anything with this information at this 
+    // stage, but for possible optimisation of resources in the future, we are 
+    // keeping it in the protocol.
     _Heartbeat.Clear();
 }
 

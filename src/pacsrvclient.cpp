@@ -335,6 +335,7 @@ class Client : public DpSocketEx
 			bool bGotIt = false;
 			
 			if (DownloadNetwork() == false) {
+				fprintf(stderr, "File couldnt be found on the network, getting from mirror now.\n");
 				bGotIt = DownloadUrl();
 			}
 			else {
@@ -359,8 +360,10 @@ class Client : public DpSocketEx
 			ASSERT(m_nPort > 0);
 			ASSERT(m_szFile != NULL);
 			
+			printf("Preparing Filename\n");
 			// Prepare the filename, removing the ".part" bit.
 			if (PrepareFilename() == true) {
+				printf("Prepared.\n");
 			
 				// connect to the local server daemon.
 				if (Connect(m_szServer, m_nPort) == false) {
@@ -399,6 +402,9 @@ class Client : public DpSocketEx
 					Unlock();
 				}			
 				
+			}
+			else {
+				fprintf(stderr, "Unable to prepare filename\n");
 			}
 			
 			Lock();
