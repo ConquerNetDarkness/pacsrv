@@ -42,7 +42,8 @@
 
 /***************************************************************************
  *   Copyright (C) 2003-2006 by Clinton Webb,,,                            *
- *   cjw@cjdj.org                                                          *
+ *   Copyright (C) 2006-2007 by Hyper-Active Systems,Australia,,           *
+ *   pacsrv@hyper-active.com.au                                            *
  *                                                                         *
  *   This library is free software; you can redistribute it and/or modify  *
  *   it under the terms of the GNU General Public License as published by  *
@@ -78,7 +79,8 @@
 
 #define PACKET_SIZE		1024
 
-#define HEARTBEAT_WAIT		30	// Number of seconds we will wait for a file from the network.
+// Number of seconds we will wait for a file from the network.
+#define HEARTBEAT_WAIT		30	
 
 #define WIDTH_FILENAME		31
 #define WIDTH_BAR			20

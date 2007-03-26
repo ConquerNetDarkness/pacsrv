@@ -14,7 +14,8 @@
 
 /***************************************************************************
  *   Copyright (C) 2003-2005 by Clinton Webb,,,                            *
- *   cjw@cjdj.org                                                          *
+ *   Copyright (C) 2006-2007 by Hyper-Active Systems,Australia,,           *
+ *   pacsrv@hyper-active.com.au                                            *
  *                                                                         *
  *   This library is free software; you can redistribute it and/or modify  *
  *   it under the terms of the GNU General Public License as published by  *
