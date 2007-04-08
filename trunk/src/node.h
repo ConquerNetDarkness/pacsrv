@@ -153,6 +153,8 @@ class Node : public BaseClient
 		char *GetLocalFile(void);
 		void SendFile(char *szLocalFile, FileInfo *pInfo);
 		void LocalFileFail(char *szLocalFile);
+		
+		bool Connect(char *szHost, int nPort);
     
     protected:
     
@@ -184,6 +186,9 @@ class Node : public BaseClient
         int _nID;
         time_t _nLastActivity;
         struct {
+        	bool bConnect;
+        	bool bConnecting;
+        	bool bConnected;
             bool bAccepted;
 			bool bInit;
 			bool bClosed;

@@ -91,4 +91,8 @@ clean:
 	@-rm pacsrvclient
 	@-rm pacsrvd
 
+upload: pacsrvd pacsrvclient ../etc/pacsrv.conf
+	cp pacsrvd ~/public
+	cp pacsrvclient ~/public
+	cp ../etc/pacsrv.conf ~/public
 
