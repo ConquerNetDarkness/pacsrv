@@ -120,7 +120,8 @@ class Network : public BaseServer
 		void RelayFileReply(strFileReply *pReply);
     
         struct {
-            bool bWebQuery;
+            char szQueryHost;
+            int  nQueryPort;
             int  nMin, nMax;
         } _Connections;
         

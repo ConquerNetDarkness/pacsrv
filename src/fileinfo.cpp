@@ -147,7 +147,7 @@ bool FileInfo::GetChunk(int nChunk, char **pData, int *nSize, int *nLength)
 	char szPath[2048];
 	long nLoc;
 	size_t nLen;
-	int nReadSize;
+	size_t nReadSize;
 	
 	ASSERT(nChunk > 0);
 	ASSERT(pData != NULL);

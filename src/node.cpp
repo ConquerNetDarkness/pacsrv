@@ -55,6 +55,9 @@ Node::Node()
     _nID = 0;
     _nLastActivity = time(NULL);
 	
+	_Status.bConnect	= false;
+    _Status.bConnecting	= false;
+    _Status.bConnected	= false;
     _Status.bAccepted	= false;
 	_Status.bInit		= false;
 	_Status.bClosed		= false;
@@ -74,6 +77,7 @@ Node::Node()
 	_pFileReply   = NULL;
 	_pServerInfo  = NULL;
 	_pRemoteNode  = NULL;
+	
 }
 
 
@@ -84,6 +88,8 @@ Node::Node()
 Node::~Node()
 {
     ASSERT(_pNext == NULL);
+    
+    WaitForThread();
 	
 	if (_Data.szFilename != NULL) {	
 		free(_Data.szFilename);
@@ -1105,4 +1111,15 @@ int Node::ProcessFileComplete(char *pData, int nLength)
 	return(1);
 }
 
+
+
+//-----------------------------------------------------------------------------
+// CJW: This function will initiate the connection to a remote port.  It will 
+//		be called from an external thread most likely, so we dont want to do 
+//		the actual connecting here, that will be done in the thread function 
+//		itself.
+bool Node::Connect(char *szHost, int nPort)
+{
+
+}
 

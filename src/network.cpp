@@ -50,8 +50,7 @@ Network::Network()
     Config config;
     char *str;
     int nPort;
-    bool bDirect;
-    char *szServer;
+//     char *szServer;
 
     Lock();
     _nNextNodeID = 1;
@@ -87,42 +86,10 @@ Network::Network()
     
     // Check our config to see if we are allowed to query the webserver for an
     // ip address of a node we can connect to.
-    _Connections.bWebQuery = true;
-    if (config.Get("network", "web-query", &str) == true) {
-        ASSERT(str != NULL);
-        if (strcmp(str, "no") == 0) {
-            _Connections.bWebQuery = false;
-        }
-        free(str);  str = NULL;
-    }
+    _Connections.szQueryHost = NULL;
+    config.Get("network", "queryhost", &_Connections.szQueryHost);
+	config.Get("network", "queryport", &_Connections.nQueryPort);
     
-    // Check our config to see if we have a direct server connecton we're
-    // supposed to establish.  Note, direct doesnt mean exclusive.
-    bDirect = false;
-    if (config.Get("network", "direct", &str) == true) {
-        ASSERT(str != NULL);
-        if (strcmp(str, "yes") == 0) {
-            bDirect = true;
-        }
-        free(str);  str = NULL;
-    }
-    
-    if (bDirect == true) {
-        szServer = NULL;
-        config.Get("direct", "server", &szServer);
-        ASSERT(szServer != NULL);
-        config.Get("direct", "port", &str);
-        ASSERT(str != NULL);
-        nPort = atoi(str);
-        ASSERT(nPort > 0);
-    
-        _pServerList->AddServer(szServer, nPort);
-    
-        free(szServer); szServer = NULL;
-        free(str);      str = NULL;
-    
-    }
-
     _nPort = 0;
     if (config.Get("network", "port", &nPort) == false) {
         logger.Error("Unable to find network port information in /etc/pacsrv.conf\n");
@@ -160,6 +127,11 @@ Network::~Network()
     ASSERT(_pFileList != NULL);
     delete _pFileList;
     _pFileList = NULL;
+    
+    if (_Connections.szQueryHost != NULL) {
+    	free(_Connections.szQueryHost);
+    	_Connections.szQueryHost = NULL;
+    }
     
     while(_pNodes != NULL) {
         pTmp = _pNodes->GetNext();
@@ -303,7 +275,19 @@ void Network::CheckConnections(void)
 // 		connections.
 bool Network::ConnectStarter(void)
 {
-	// TODO:
+	Node *pNode;
+	Logger log;
+	char *str;
+	
+	ASSERT(_Connections.szQueryHost != NULL);	
+	ASSERT(_Connections.szQueryPort > 0);
+	
+	log.System("Network: Creating Starter Connection to %s:%d", _Connections.szQueryHost, _Connections.szQueryPort);
+	
+	pNode = new Node;
+	pNode->Connect(_Connections.szQueryHost, _Connections.szQueryPort);
+	nID = AddNode(pNode);
+	
 	return false;
 }
 

@@ -100,24 +100,24 @@ class Client : public DpSocketEx
 	public:
 	protected:
 	private:
-		char *m_szFile;			// File parameter that is supplied.
-		char *m_szUrl;			// URL parameter that is supplied.
-		char *m_szServer;		// address (ip or name) of the daemon we need to talk to.
-		int   m_nPort;			// port the daemon is listening on.
+		char *_szFile;			// File parameter that is supplied.
+		char *_szUrl;			// URL parameter that is supplied.
+		char *_szServer;		// address (ip or name) of the daemon we need to talk to.
+		int   _nPort;			// port the daemon is listening on.
 		
 		struct {
 			int nFileSize;
 			int nDone;
 			time_t nStart;
-		} m_Stats;
+		} _Stats;
 		
-		struct strHeartbeat m_Heartbeat;
+		struct strHeartbeat _Heartbeat;
 		
 		struct {
 			char szFileDisplay[WIDTH_FILENAME + 1];	// Displayable file name.. may be truncated.
 			int nFileSize;
 			char cSizeInd;
-		} m_Display;
+		} _Display;
 		
 		struct {
 			bool bStop;			// true if we should stop looping.
@@ -125,7 +125,7 @@ class Client : public DpSocketEx
 			bool bRequest;		// true if FILE REQUEST has been sent.
 			bool bFileLength;	// true if we have received file length info.
 			bool bComplete;		// true if the file is completed.
-		} m_Status;
+		} _Status;
 		
 		struct {
 			char *szFilename;	// Filename that we are going to query the network with.
@@ -135,7 +135,7 @@ class Client : public DpSocketEx
 				int nCount;
 				int nSize;
 			} chunk, temp;
-		} m_File;
+		} _File;
 
 		
 		
@@ -144,42 +144,42 @@ class Client : public DpSocketEx
 		// CJW: Constructor.  Initialise our variables here.
 		Client() 
 		{
-			m_szFile = NULL;
-			m_szUrl = NULL;
-			m_szServer = NULL;
+			_szFile = NULL;
+			_szUrl = NULL;
+			_szServer = NULL;
 			
-			m_Stats.nFileSize = 0;
-			m_Stats.nDone = 0;
-			m_Stats.nStart = 0;
+			_Stats.nFileSize = 0;
+			_Stats.nDone = 0;
+			_Stats.nStart = 0;
 						
-			m_Display.szFileDisplay[0] = '\0';
-			m_Display.nFileSize = 0;
-			m_Display.cSizeInd = 'x';
+			_Display.szFileDisplay[0] = '\0';
+			_Display.nFileSize = 0;
+			_Display.cSizeInd = 'x';
 			
-			m_Status.bInit       = false;
-			m_Status.bRequest    = false;
-			m_Status.bStop       = false;
-			m_Status.bFileLength = false;
+			_Status.bInit       = false;
+			_Status.bRequest    = false;
+			_Status.bStop       = false;
+			_Status.bFileLength = false;
 			
-			m_File.szFilename = NULL;
-			m_File.fp = NULL;
-			m_File.nSize = 0;
-			m_File.chunk.nCount = 0;
-			m_File.chunk.nSize = 0;
+			_File.szFilename = NULL;
+			_File.fp = NULL;
+			_File.nSize = 0;
+			_File.chunk.nCount = 0;
+			_File.chunk.nSize = 0;
 		}
 		
 		//---------------------------------------------------------------------
 		// CJW: Deconstructor.  Clean up our crap in here.
 		virtual ~Client()
 		{
-			if (m_szServer != NULL) { 
-				free(m_szServer); 
-				m_szServer = NULL; 
+			if (_szServer != NULL) { 
+				free(_szServer); 
+				_szServer = NULL; 
 			}
 			
-			if (m_File.szFilename != NULL) {
-				free(m_File.szFilename);
-				m_File.szFilename = NULL;
+			if (_File.szFilename != NULL) {
+				free(_File.szFilename);
+				_File.szFilename = NULL;
 			}
 		}
 		
@@ -192,24 +192,24 @@ class Client : public DpSocketEx
 		{
 			bool bValid = false;
 	
-			ASSERT(m_szFile == NULL && m_szUrl == NULL);
+			ASSERT(_szFile == NULL && _szUrl == NULL);
 			
 			if (argc == 3) {
-				m_szFile = argv[1];
-				m_szUrl = argv[2];
+				_szFile = argv[1];
+				_szUrl = argv[2];
 		
-				if (strlen(m_szFile) > WIDTH_FILENAME) {
-					strncpy(m_Display.szFileDisplay, m_szFile, (WIDTH_FILENAME - 3));
-					m_Display.szFileDisplay[WIDTH_FILENAME-3] = '.';
-					m_Display.szFileDisplay[WIDTH_FILENAME-2] = '.';
-					m_Display.szFileDisplay[WIDTH_FILENAME-1] = '.';
-					m_Display.szFileDisplay[WIDTH_FILENAME] = '\0';
+				if (strlen(_szFile) > WIDTH_FILENAME) {
+					strncpy(_Display.szFileDisplay, _szFile, (WIDTH_FILENAME - 3));
+					_Display.szFileDisplay[WIDTH_FILENAME-3] = '.';
+					_Display.szFileDisplay[WIDTH_FILENAME-2] = '.';
+					_Display.szFileDisplay[WIDTH_FILENAME-1] = '.';
+					_Display.szFileDisplay[WIDTH_FILENAME] = '\0';
 				}
 				else {
-					strncpy(m_Display.szFileDisplay, m_szFile, WIDTH_FILENAME);
+					strncpy(_Display.szFileDisplay, _szFile, WIDTH_FILENAME);
 				}
 				
-				if (m_szFile != NULL && m_szUrl != NULL) {
+				if (_szFile != NULL && _szUrl != NULL) {
 					bValid = true;
 				}
 			}
@@ -230,10 +230,10 @@ class Client : public DpSocketEx
 			if (pIni != NULL) {
 				if (pIni->Load(INI_FILE) == true) {
 					if (pIni->SetGroup("client") == true) {
-						if (pIni->GetValue("server", &m_szServer) == true) {
-							if (pIni->GetValue("port", &m_nPort) == true) {
+						if (pIni->GetValue("server", &_szServer) == true) {
+							if (pIni->GetValue("port", &_nPort) == true) {
 				
-								if (m_szServer != NULL && m_nPort > 0) {
+								if (_szServer != NULL && _nPort > 0) {
 									bValid = true;
 								}
 							}
@@ -260,42 +260,42 @@ class Client : public DpSocketEx
 			time_t nTime;
 			int nSeconds;
 			
-			ASSERT(m_Display.szFileDisplay != NULL);
-			ASSERT(m_Display.szFileDisplay[0] != '\0');
-			ASSERT(m_Stats.nFileSize > 0);
+			ASSERT(_Display.szFileDisplay != NULL);
+			ASSERT(_Display.szFileDisplay[0] != '\0');
+			ASSERT(_Stats.nFileSize > 0);
 			
-			if (m_Display.nFileSize == 0) {
+			if (_Display.nFileSize == 0) {
 			
-				m_Display.nFileSize = m_Stats.nFileSize;
-				if (m_Display.nFileSize <= 999) {
-					m_Display.cSizeInd = 'b';
+				_Display.nFileSize = _Stats.nFileSize;
+				if (_Display.nFileSize <= 999) {
+					_Display.cSizeInd = 'b';
 				}
 				else {
-					m_Display.nFileSize /= 1024;
-					if (m_Display.nFileSize <= 1) { m_Display.nFileSize = 1; }
-					if (m_Display.nFileSize <= 999) {
-						m_Display.cSizeInd = 'k';
+					_Display.nFileSize /= 1024;
+					if (_Display.nFileSize <= 1) { _Display.nFileSize = 1; }
+					if (_Display.nFileSize <= 999) {
+						_Display.cSizeInd = 'k';
 					}
 					else {
-						m_Display.nFileSize /= 1024;
-						if (m_Display.nFileSize <= 1) { m_Display.nFileSize = 1; }
-						if (m_Display.nFileSize <= 999) {
-							m_Display.cSizeInd = 'm';
+						_Display.nFileSize /= 1024;
+						if (_Display.nFileSize <= 1) { _Display.nFileSize = 1; }
+						if (_Display.nFileSize <= 999) {
+							_Display.cSizeInd = 'm';
 						}
 						else {
-							m_Display.nFileSize /= 1024;
-							if (m_Display.nFileSize <= 1) { m_Display.nFileSize = 1; }
-							if (m_Display.nFileSize <= 999) {
-								m_Display.cSizeInd = 'g';
+							_Display.nFileSize /= 1024;
+							if (_Display.nFileSize <= 1) { _Display.nFileSize = 1; }
+							if (_Display.nFileSize <= 999) {
+								_Display.cSizeInd = 'g';
 							}
 						}
 					}
 				}
 			}			
-			ASSERT(m_Display.cSizeInd != 'x');
+			ASSERT(_Display.cSizeInd != 'x');
 			
 			
-			nPercent = (m_Stats.nDone / (m_Stats.nFileSize / 100));
+			nPercent = (_Stats.nDone / (_Stats.nFileSize / 100));
 			j = nPercent / (100/WIDTH_BAR);
 			for(i=0; i<WIDTH_BAR; i++) {
 				if (i<=j) {
@@ -309,20 +309,20 @@ class Client : public DpSocketEx
 			
 			// Need to also determine the download rate, and the estimated time left.
 			nTime = time(NULL);
-			nSeconds = nTime - m_Stats.nStart;
+			nSeconds = nTime - _Stats.nStart;
 			ASSERT(nSeconds >= 0);
 			if (nSeconds == 0) {
-				nRate = m_Stats.nDone;
+				nRate = _Stats.nDone;
 			}
 			else {
-				nRate = m_Stats.nDone / nSeconds;
+				nRate = _Stats.nDone / nSeconds;
 			}
 			nRateLo = nRate % 1024;
 			nRate = nRate / 1024;
 			if (nRateLo < 100) { nRateLo = 1; }
 			else { nRate /= 100; }
 			
-			printf("\r%*s %3d%c |%s| %3d%% %4d.%1dkb/s ", WIDTH_FILENAME, m_Display.szFileDisplay, m_Display.nFileSize, m_Display.cSizeInd, szBar, nPercent, nRate, nRateLo );
+			printf("\r%*s %3d%c |%s| %3d%% %4d.%1dkb/s ", WIDTH_FILENAME, _Display.szFileDisplay, _Display.nFileSize, _Display.cSizeInd, szBar, nPercent, nRate, nRateLo );
 			fflush(stdout);
 		}
 
@@ -358,9 +358,9 @@ class Client : public DpSocketEx
 			bool bGotIt = false;
 			int nLoops;
 			
-			ASSERT(m_szServer != NULL);
-			ASSERT(m_nPort > 0);
-			ASSERT(m_szFile != NULL);
+			ASSERT(_szServer != NULL);
+			ASSERT(_nPort > 0);
+			ASSERT(_szFile != NULL);
 			
 			printf("Preparing Filename\n");
 			// Prepare the filename, removing the ".part" bit.
@@ -368,8 +368,8 @@ class Client : public DpSocketEx
 				printf("Prepared.\n");
 			
 				// connect to the local server daemon.
-				if (Connect(m_szServer, m_nPort) == false) {
-					fprintf(stderr, "pacsrvclient: ** Unable to connect to server %s:%d\n\n", m_szServer, m_nPort);
+				if (Connect(_szServer, _nPort) == false) {
+					fprintf(stderr, "pacsrvclient: ** Unable to connect to server %s:%d\n\n", _szServer, _nPort);
 				}
 				else {
 				
@@ -380,8 +380,8 @@ class Client : public DpSocketEx
 				
 					
 					Lock();
-					m_Heartbeat.nLastCheck = time(NULL);
-					m_Stats.nStart = m_Heartbeat.nLastCheck;
+					_Heartbeat.nLastCheck = time(NULL);
+					_Stats.nStart = _Heartbeat.nLastCheck;
 					Unlock();
 					
 					
@@ -391,7 +391,7 @@ class Client : public DpSocketEx
 					// Now we loop, displaying the status every second.
 					nLoops = 0;
 					Lock();
-					while(m_Status.bStop == false) {
+					while(_Status.bStop == false) {
 						if (nLoops >= LOOP_LOOPS) { 
 							DisplayStatus(); 
 							nLoops = 0; 
@@ -410,12 +410,12 @@ class Client : public DpSocketEx
 			}
 			
 			Lock();
-			if (m_File.fp != NULL) {
-				fclose(m_File.fp);
-				m_File.fp = NULL;
+			if (_File.fp != NULL) {
+				fclose(_File.fp);
+				_File.fp = NULL;
 			}
 			
-			if (m_Status.bComplete == true) {
+			if (_Status.bComplete == true) {
 				bGotIt = true;
 			}
 			Unlock();
@@ -435,16 +435,16 @@ class Client : public DpSocketEx
 			int nLength;
 			bool bValid = false;
 			
-			ASSERT(m_szFile != NULL);
-			ASSERT(m_File.szFilename == NULL);
+			ASSERT(_szFile != NULL);
+			ASSERT(_File.szFilename == NULL);
 			
-			nLength = strlen(m_szFile);
+			nLength = strlen(_szFile);
 			if (nLength > 16) {
-				if (strncmp(&m_szFile[nLength - 16], ".pkg.tar.gz.part", 16) == 0) {
-					m_File.szFilename = (char *) malloc((nLength - 16)+1);
-					ASSERT(m_File.szFilename);
-					strncpy(m_File.szFilename, m_szFile, nLength - 5);
-					m_File.szFilename[nLength-5] = '\0';
+				if (strncmp(&_szFile[nLength - 16], ".pkg.tar.gz.part", 16) == 0) {
+					_File.szFilename = (char *) malloc((nLength - 16)+1);
+					ASSERT(_File.szFilename);
+					strncpy(_File.szFilename, _szFile, nLength - 5);
+					_File.szFilename[nLength-5] = '\0';
 					bValid = true;
 				}
 			}
@@ -469,7 +469,7 @@ class Client : public DpSocketEx
 		void OnClosed()
 		{
 			Lock();
-			m_Status.bStop = true;
+			_Status.bStop = true;
 			Unlock();
 		}
 		
@@ -485,7 +485,7 @@ class Client : public DpSocketEx
 			
 			Lock();
 			
-			ASSERT(m_Status.bInit == true);
+			ASSERT(_Status.bInit == true);
 			
 			// Now we need to actually check the contents of our received data. 
 			switch(pData[0]) {
@@ -495,7 +495,7 @@ class Client : public DpSocketEx
 					break;
 				
 				case 'H':
-					m_Heartbeat.nBeats = 0;
+					_Heartbeat.nBeats = 0;
 					nDone = 1;
 					break;
 									
@@ -519,13 +519,13 @@ class Client : public DpSocketEx
 				case 'Q':
 				case 'X':
 				default:
-					m_Status.bStop = true;
+					_Status.bStop = true;
 					nDone = 1;
 					break;										
 			}
 			
 			if (nDone > 0) {
-				m_Heartbeat.nBeats = 0;
+				_Heartbeat.nBeats = 0;
 			}
 			
 			Unlock();
@@ -541,7 +541,7 @@ class Client : public DpSocketEx
 		{
 			Send("I\000\000", 3);
 			Lock();
-			m_Status.bInit = true;
+			_Status.bInit = true;
 			Unlock();
 		}
 		
@@ -556,8 +556,8 @@ class Client : public DpSocketEx
 			unsigned char ch;
 			
 			Lock();
-			ASSERT(m_File.szFilename != NULL);
-			nLength = strlen(m_File.szFilename);
+			ASSERT(_File.szFilename != NULL);
+			nLength = strlen(_File.szFilename);
 			ASSERT(nLength < 256);
 			
 			ch = (unsigned char) nLength;
@@ -565,9 +565,9 @@ class Client : public DpSocketEx
 			// *** to improve performance a little bit, we should put all this data into a buffer and then send once.
 			Send("F", 1);
 			Send((char *) &ch, 1);
-			Send(m_File.szFilename, nLength);
+			Send(_File.szFilename, nLength);
 			
-			m_Status.bRequest = true;
+			_Status.bRequest = true;
 			Unlock();
 		}
 		
@@ -589,22 +589,22 @@ class Client : public DpSocketEx
 			
 			Lock();
 			nTime = time(NULL);
-			if (nTime > m_Heartbeat.nLastCheck) {
-				m_Heartbeat.nDelay ++;
+			if (nTime > _Heartbeat.nLastCheck) {
+				_Heartbeat.nDelay ++;
 				
-				if (m_Status.bFileLength == false) {
-					m_Heartbeat.nWait ++;
+				if (_Status.bFileLength == false) {
+					_Heartbeat.nWait ++;
 				}
 				
-				if (m_Heartbeat.nWait > HEARTBEAT_WAIT) {
-					m_Status.bStop = true;
+				if (_Heartbeat.nWait > HEARTBEAT_WAIT) {
+					_Status.bStop = true;
 				}
 				else {
-					if (m_Heartbeat.nDelay >= HEARTBEAT_DELAY) {
-						m_Heartbeat.nBeats++;
-						m_Heartbeat.nDelay = 0;
-						if (m_Heartbeat.nBeats > HEARTBEAT_MISS) {
-							m_Status.bStop = true;
+					if (_Heartbeat.nDelay >= HEARTBEAT_DELAY) {
+						_Heartbeat.nBeats++;
+						_Heartbeat.nDelay = 0;
+						if (_Heartbeat.nBeats > HEARTBEAT_MISS) {
+							_Status.bStop = true;
 						}
 						else {
 							Send("H", 1);
@@ -612,7 +612,7 @@ class Client : public DpSocketEx
 					}
 				}
 								
-				m_Heartbeat.nLastCheck = nTime;
+				_Heartbeat.nLastCheck = nTime;
 			}
 			Unlock();
 		}
@@ -633,25 +633,25 @@ class Client : public DpSocketEx
 			ASSERT(pData != NULL && nLength > 0);
 			ASSERT(nLength >= 5 && pData[0] == 'L');
 			
-			ASSERT(m_File.nSize == 0);
-			ASSERT(m_File.fp == NULL);
+			ASSERT(_File.nSize == 0);
+			ASSERT(_File.fp == NULL);
 			
-			if (m_Status.bFileLength == true || m_File.nSize != 0) {
-				m_Status.bStop = true;
+			if (_Status.bFileLength == true || _File.nSize != 0) {
+				_Status.bStop = true;
 			}
 			else {
-				m_Status.bFileLength = true;
+				_Status.bFileLength = true;
 				
-				m_File.nSize = 0;
-				m_File.nSize += ((unsigned char) pData[1]) << 24;
-				m_File.nSize += ((unsigned char) pData[2]) << 16;
-				m_File.nSize += ((unsigned char) pData[3]) << 8;
-				m_File.nSize +=  (unsigned char) pData[4];
+				_File.nSize = 0;
+				_File.nSize += ((unsigned char) pData[1]) << 24;
+				_File.nSize += ((unsigned char) pData[2]) << 16;
+				_File.nSize += ((unsigned char) pData[3]) << 8;
+				_File.nSize +=  (unsigned char) pData[4];
 														
 				// we are opening the filename that was passed as an argument to this application. (the one with .part)
-				m_File.fp = fopen(m_szFile, "w");		
-				if (m_File.fp == NULL) {
-					m_Status.bStop = true;
+				_File.fp = fopen(_szFile, "w");		
+				if (_File.fp == NULL) {
+					_Status.bStop = true;
 				}
 			}
 		}
@@ -668,38 +668,38 @@ class Client : public DpSocketEx
 		//		will return the length of the chunk.
 		int ProcessChunk(char *pData, int nLength)
 		{
-			m_File.temp.nSize = 0;
+			_File.temp.nSize = 0;
 
-			m_File.temp.nCount = ((unsigned char) pData[1]) << 8;
-			m_File.temp.nCount += (unsigned char) pData[2];
+			_File.temp.nCount = ((unsigned char) pData[1]) << 8;
+			_File.temp.nCount += (unsigned char) pData[2];
 												
-			if (m_File.temp.nCount != m_File.chunk.nCount) {
-				m_Status.bStop = true;
+			if (_File.temp.nCount != _File.chunk.nCount) {
+				_Status.bStop = true;
 			}
 			else {
-				m_File.chunk.nCount = m_File.temp.nCount;
+				_File.chunk.nCount = _File.temp.nCount;
 
-				m_File.temp.nSize = ((unsigned char) pData[3]) << 8;
-				m_File.temp.nSize += (unsigned char) pData[4];
+				_File.temp.nSize = ((unsigned char) pData[3]) << 8;
+				_File.temp.nSize += (unsigned char) pData[4];
 													
-				if (m_File.temp.nSize <= 0) {
-					m_Status.bStop = true;
+				if (_File.temp.nSize <= 0) {
+					_Status.bStop = true;
 				}
 				else {
-					if ((nLength-1) >= (m_File.temp.nSize + 4)) {
-						ASSERT(m_File.fp != NULL);
+					if ((nLength-1) >= (_File.temp.nSize + 4)) {
+						ASSERT(_File.fp != NULL);
 						
-						m_Stats.nDone += m_File.temp.nSize;
-						fwrite(&pData[5], m_File.temp.nSize, 1, m_File.fp);
+						_Stats.nDone += _File.temp.nSize;
+						fwrite(&pData[5], _File.temp.nSize, 1, _File.fp);
 					}
 					else {
-						m_File.temp.nSize = 0;
+						_File.temp.nSize = 0;
 					}
 				}
 			}
 			
-			ASSERT(m_File.temp.nSize >= 0);
-			return(m_File.temp.nSize);
+			ASSERT(_File.temp.nSize >= 0);
+			return(_File.temp.nSize);
 		}
 		
 		
@@ -713,11 +713,11 @@ class Client : public DpSocketEx
 		// 		it for us.
 		bool DownloadUrl(void)
 		{
-			ASSERT(m_szUrl != NULL);
-			ASSERT(m_szFile != NULL);
+			ASSERT(_szUrl != NULL);
+			ASSERT(_szFile != NULL);
 			
 			// This function will basically call wget and this process will cease to be.  If the function returns, then something went wrong.
-			execl("/usr/bin/wget", "-nv", "-c", "-O", m_szFile, m_szUrl, (char *) NULL);
+			execl("/usr/bin/wget", "-nv", "-c", "-O", _szFile, _szUrl, (char *) NULL);
 			
 			printf("Something went wrong with wget.\n");
 			
