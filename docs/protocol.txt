@@ -1,6 +1,13 @@
 Pacsrv Communications Protocol.
 
-I toyed with the idea of using XML to encapsulate the transfer protocol, but decided to use a simple, communications protocol with very little overhead.  It is designed to be most optimal when a large number of nodes can provide parts of a file, even if each individual node can only transfer at slow rates.   It is not really optimised for high speed transfer from one node to another node.  Some tweaks may be added later, and the protocol itself doesnt stop a client from asking for multiple chunks of a file at a time, etc.
+This is version 2 of the protocol and we are now using a RISC based 
+protocol.  It is a simple binary protocol made up of commands that are 
+used in combination to form a single operation.  Commands can have a 
+single parameter (or none at all) and the operation doesnt execute until 
+the GO command is received.
+
+The command is a single byte.   The parameters are based on the 
+
 
 -------------------------------------------------------------------------
 
