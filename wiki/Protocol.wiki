@@ -6,9 +6,9 @@ The clients and servers will need to communicate with each other.
 
 = Requirements =
 
-* Simple protocol that is easy to implement
-* Flexible, so that additional functionality can be added.
-* Version agnostic.  Additional features should not cause problems with older versions of the server or client.
+  * Simple protocol that is easy to implement
+  * Flexible, so that additional functionality can be added.
+  * Version agnostic.  Additional features should not cause problems with older versions of the server or client.
 
 = Details =
 
