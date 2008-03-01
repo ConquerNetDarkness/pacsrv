@@ -6,50 +6,152 @@ used in combination to form a single operation.  Commands can have a
 single parameter (or none at all) and the operation doesnt execute until 
 the GO command is received.
 
+All operations are stateless.  This means that the server and client cannot assume that 
+you know what it is talking about.  However, the received paramters are NOT cleared 
+unless a CLEAR is received.   This means that a node can re-use information that is 
+already sent.
+
+
 The command is a single byte.   The parameters are based on the 
+
+No Params
+	
+	0x00	No-op
+	0x01	Clear
+	0x02	Execute
+	0x03	Close
+	0x04	Get
+	0x05	Exists
+	0x06	Searching
+	0x07	Received
+
+Byte 
+
+	0x40	Result
+
+Word (4 bytes)
+
+	0x60	Length
+	0x61	Chunk
+	0x62
+
+Short String (1 byte length, followed by data)
+
+	0x80	Comment
+	0x81	File Name 
+
+Long String (4 byte length, followed by data)
+
+	0xA0	
 
 
 -------------------------------------------------------------------------
 
-Communications from the User client will use a very simple and moronic protocol.   Also, it is not designed to be resistant to network dropouts because it is expected that in almost all instances, the client is on the same machine as the server.  However, if people tend to use a central machine as the package server and all clients connect directly to it, then some hardening of this protocol might be desired (and some functionality added to the server to actually store the packages that it receives).
+Process Flows
 
-Client -> Server commands
+We have several classes of service.   We have a client/server relationship, and also a 
+server/server relationship.   To keep things simple, we will call the server/server 
+relationship a node/node relationship.  
 
-I - Initialisation.  Will provide a two byte version code (protocol version, no software version).
-    eg.  I<0x00><0x00>
-    
-H - Heartbeat.  No other values.
+When a client connects to a server, it is solely to get a required file.
 
-F - File request.  Will have a 1 byte length, followed by an ASCII filename of max 255 chars (1 byte max).
-    eg.  F<0x10>hwd-4.7.1-1.pkg.tar.gz
-    
-R - Chunk received confirmation. Will contain the 2 byte chunk value.  
-    In this example, we are confirming chunk 4146 (0x1032).
-    eg.  R<0x10><0x32>
+	CLEAR
+	FILENAME <filename-pkg.tar.gz>
+	GET
+	EXECUTE
 
-Server -> Client commands.
+If the server has the file, it will respond with:
 
-V - Version Valid.
+	CLEAR
+	FILENAME <filename-pkg.tar.gz>
+	EXISTS
+	LENGTH <length>
+	EXECUTE
 
-Q - Quit the connection.  Most likely because the version is incompatible.
+If the server doesn't have the file, it will first respond with:
 
-H - Heartbeat.  No other values.
+	CLEAR
+	SEARCHING
+	EXECUTE
 
-X - File doesnt exist.  This is a good close, rather than Q which indicates a failure.
+It will then queue requests to all the connected nodes, asking them if they have the 
+file.
 
-L - Length of the file.  First command following a File request.  Length is 4 bytes.
-    eg.  L<0x32><0x34><0x11><0xe2>
-    is 0x323411e2 (cannot be directly dropped into a long, must be translated)
+	CLEAR
+	SEARCH
+	TTL <15>
+	FILENAME "filename-pkg.tar.gz"
+	PATH "ip:port"
+	EXECUTE
 
-C - Chunk data.  We provide a chunk number (2 bytes), 
-    followed by the length of the chunk (2 bytes).
-    After that we will send the chunk data.
-    eg.  C<0x00><0x00><0x00><0xff>ljkndsfolknfdslkjnsgfdlknslfdknldsknflkndsf...
+Each node that received the SEARCH request, will pass on the search request to all nodes 
+that it has connected, IF the TTL is not zero, and the connected nodes are not already 
+in the PATH list.  The TTL number will be reduced by 1, and this servers ip and port 
+will be added to the path.
 
-After the last chunk is received, the client will close the connection with the server.  The server will not close the connection unless the heartbeats fail.
+	CLEAR
+	SEARCH
+	TTL <14>
+	FILENAME "filename-pkg.tar.gz"
+	PATH "ip:port,ip:port"
+	EXECUTE
 
-If we get any other command characters other than the ones we have listed here, then we will simply close the connection because the stream got corrupted.  We will let the pacman tool figure out if the file is corrupt or not.
+At the same time, it will look in its own file list, and partially downloaded files, and 
+if it has the file.   If it has a visible port on the internet it will reply with:
 
+	CLEAR
+	FOUND
+	FILENAME "filename-pkg.tar.gz"
+	TARGET "ip:port"
+	PATH "ip:port" 
+	EXECUTE
+
+The reply will get re-transmitted back along the PATH that was supplied, each server 
+will remove its own IP address from the path, and pass it to the next.  When it gets to 
+the originating server, it will connect to the TARGET address.   
+
+If the server doesn't have a visible port on the internet (determined based on startup 
+options), it will instead connect to the first ip:port in the PATH and will simply try 
+to connect directly with the server that made the request.   This will allow the system 
+to handle both sides of a NAT.
+
+Once a server has received a FOUND operation for a file that it is looking for, it will 
+start asking for chunks that it needs.   
+
+	CLEAR
+	FILENAME "filename-pkg.tar.gz"
+	GET_CHUNK
+	CHUNK_ID <0x00000000>
+	EXECUTE
+	CHUNK_ID <0x00000001>
+	EXECUTE
+	CHUNK_ID <0x00000002>
+	EXECUTE
+
+The server or node will send each chunk as requested.
+
+	CLEAR
+	SEND_CHUNK
+	FILENAME "filename-pkg.tar.gz"
+	CHUNK_ID <45>
+	LENGTH <16384>
+	DATA <...data...>
+	EXECUTE
+	CHUNK_ID <46>
+	DATA <...data...>
+	EXECUTE
+	CHUNK_ID <47>
+	DATA <...data...>
+	EXECUTE
+
+When the server receives chunks for a file that a connected client is waiting on, it 
+will need to send it back.   
+
+After the last chunk is received, the client will close the connection with the server.  
+The server will not close the connection unless the heartbeats fail.
+
+Heartbeats are merely a NO-OP every 5 seconds or so.  If the server doesnt receive 
+anything within 30 seconds, it closes the connection.
 
 -------------------------------------------------------------------------------
 
