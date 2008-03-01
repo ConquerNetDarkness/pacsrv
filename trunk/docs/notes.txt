@@ -1,22 +1,48 @@
 pacsrv
 
 Threads 
-	For the sake of system activity, I've designed the system so that it is thread based, but does most of the work in two threads. One thread for maintaining the network of nodes (other daemons), and another thread to communicate with the local clients.  Additionally a thread will be created to handle each connected socket but not very much processing will be done in those threads.  It will retrieve the data and store it ready for one of the processing threads to act on it.
+
+	Both the server and client will be a single-thread process.  It will use 
+	libevent for managing events on the sockets that are connected.
 	
 	
 Sockets
-	The daemon will listen on two ports.  One will be to communicate with the other nodes in the network.  The other socket will be to send files to the client application.
+
+	The daemon will listen on two ports.  One will be to communicate with the other 
+	nodes in the network.  The other socket will be to send files to the client 
+	application.
 	
 	
 Internal client connection maintenance.
-	Since the daemon is expected to have a single client connect to it (but designed to handle more, but most likely wont), then we can easily keep those client connections in an array.  
+
+	Since the daemon is expected to have a single client connect to it (but designed 
+	to handle more, but most likely wont), then we can easily keep those client 
+	connections in an array.
 	
 	
 Internal node connection maintenance.
-	The daemon will expect to obtain and maintain numerous connections to the other daemons and these will likely change around a bit as nodes in the network go up and down.  Therefore, we should use a linked list to keep track of the nodes.  This will make it a little easier to add and remove them from the list.
+
+	The daemon will expect to obtain and maintain numerous connections to the other 
+	daemons and these will likely change around a bit as nodes in the network go up 
+	and down.  Therefore, we should use a linked list to keep track of the nodes.  
+	This will make it a little easier to add and remove them from the list.
 	
 Chunk Size
-	The chunk size was chosen to be 32kb.  Thats 32768 bytes.  This value was chosen for several reasons.  First, the total number of chunks is 65536, which gives us a maximum total file size of 2gb.  It would be a bit unreasonable to expect package sizes to be greater than that.  In fact, a package that size would be difficult to host on a web or ftp server, so I think we're pretty safe with file sizes.   The other reason why 32kb chunk size was chosen, was because that is about the amount of data a dial-up modem can upload in about 10 seconds, which is about 2 thirds the way into a heartbeat failure on the client side.  This would be the largest size chunk that could be reasonably be expected to work with a modem connection between the client and the server (not talking about nodes and networks).   Although I dont expect anyone would really be intending to use a dial-up line to talk directly from client to server, but I figured that would be the lowest possible connection type, and built the protocol to handle that at a minimum.
+
+	The chunk size was chosen to be 16kb.  Thats 16384 bytes.  This value was chosen
+	for several reasons.  First, the total number of chunks is represented in 4 
+	bytes, which is 4 billion or so.  I highly doubt that we will hit any maximum 
+	limits within the forseable future. In fact, a package that size would be
+	difficult to host on a web or ftp server, so I think we're pretty safe with file
+	sizes.  The other reason why 16kb chunk size was chosen, was because that is
+	about the amount of data a dial-up modem can upload in about 5 seconds, which
+	is about 1 thirds the way into a heartbeat failure on the client side.  This
+	would be the largest size chunk that could be reasonably be expected to work
+	with a modem connection between the client and the server (not talking about
+	nodes and networks).  Although I dont expect anyone would really be intending to
+	use a dial-up line to talk directly from client to server, but I figured that
+	would be the lowest possible connection type, and built the protocol to handle 
+	that at a minimum.
 	
 	
 	
